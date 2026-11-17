@@ -1,0 +1,45 @@
+name: 정보쇼츠 자동 제작
+
+on:
+  schedule:
+    - cron: '7 8 * * *'          # 매일 17:07 (한국 시간) — 장 마감 뒤. 시황 → 종목 분석 → 생활 꿀팁 순서로 돌아감
+  push:
+    branches: [main]
+    paths: ['queue/**']          # 대기열에 대본을 올리면 바로 제작
+  workflow_dispatch:
+    inputs:
+      category:
+        description: '주제 (auto = 순서대로)'
+        type: choice
+        default: auto
+        options: [auto, market, stock, life, queue]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: info
+  cancel-in-progress: false
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 프로그램 설치
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk fonts-noto-cjk-extra
+          pip install -q -r requirements.txt
+      - name: 쇼츠 만들기 + 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CATEGORY: ${{ github.event.inputs.category || 'auto' }}
+        run: |
+          git config --global user.name "info-bot"
+          git config --global user.email "info-bot@users.noreply.github.com"
+          python info_bot/daily.py
