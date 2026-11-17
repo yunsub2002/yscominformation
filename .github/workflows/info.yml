@@ -27,6 +27,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 최신 목록 받기 (앞 실행 결과 반영)
+        run: git pull --ff-only origin main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

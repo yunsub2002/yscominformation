@@ -23,6 +23,13 @@ STOCKS = [('005930', '삼성전자'), ('000660', 'SK하이닉스'), ('373220', '
           ('012330', '현대모비스'), ('329180', 'HD현대중공업'), ('035720', '카카오'), ('034020', '두산에너빌리티'), ('006400', '삼성SDI'), ('051910', 'LG화학'), ('015760', '한국전력'),
           ('032830', '삼성생명'), ('086790', '하나금융지주'), ('066570', 'LG전자'), ('003550', 'LG'), ('017670', 'SK텔레콤'), ('096770', 'SK이노베이션'), ('010130', '고려아연')]
 BIGCAPS = STOCKS[:14]
+# 회사 한 줄 소개 (영상 첫 화면 · 첫 문장). 사업 분야만 짧게, 평가나 전망은 넣지 않음
+ABOUT = {'005930': '반도체·스마트폰·가전을 만드는', '000660': '메모리 반도체를 만드는', '373220': '전기차 배터리를 만드는', '207940': '바이오 의약품을 위탁 생산하는',
+         '005380': '자동차를 만드는', '012450': '항공 엔진과 방산 장비를 만드는', '000270': '자동차를 만드는', '068270': '바이오시밀러를 만드는', '105560': 'KB국민은행이 속한 금융지주',
+         '035420': '검색 포털을 운영하는', '055550': '신한은행이 속한 금융지주', '005490': '철강과 2차전지 소재 사업을 하는', '028260': '건설·상사·패션·리조트 사업을 하는',
+         '012330': '자동차 부품을 만드는', '329180': '배를 만드는 조선', '035720': '카카오톡을 운영하는', '034020': '발전 설비와 원전 기기를 만드는', '006400': '배터리를 만드는',
+         '051910': '석유화학과 배터리 소재 사업을 하는', '015760': '전기를 공급하는 공공', '032830': '생명보험', '086790': '하나은행이 속한 금융지주', '066570': '가전과 자동차 전장 부품을 만드는',
+         '003550': 'LG 계열사들을 거느린 지주', '017670': '이동통신', '096770': '정유와 배터리 사업을 하는', '010130': '아연 등 비철금속을 제련하는'}
 DISC_MKT = '정보 제공용 영상이며 투자 권유가 아닙니다. 투자 판단과 책임은 본인에게 있습니다.'
 DISC_STK = '특정 종목의 매수·매도를 권하는 영상이 아닙니다. 투자 판단과 책임은 본인에게 있습니다.'
 
@@ -123,93 +130,144 @@ def updown_say(r): return '올랐' if r > 0 else '내렸' if r < 0 else '변동�
 
 
 # ───────────────────────────── 대본 만들기
+def index_hist(code, n=60):
+    rows = jget(f'https://m.stock.naver.com/api/index/{code}/price?pageSize={n}&page=1')
+    return [(r['localTradedAt'], num(r['closePrice']), num(r['fluctuationsRatio'])) for r in rows][::-1]       # 오래된 날 → 오늘
+
+
+def streak(ratios):
+    """끝에서부터 같은 방향으로 며칠 연속인지 → (일수, +1/-1)"""
+    if not ratios or ratios[-1] == 0: return 0, 0
+    sgn = 1 if ratios[-1] > 0 else -1; k = 0
+    for r in reversed(ratios):
+        if (r > 0) == (sgn > 0) and r != 0: k += 1
+        else: break
+    return k, sgn
+
+
 def write_market(R):
     k = index_today('KOSPI')
     if not k: return None
     q = index_today('KOSDAQ'); fl = flows('KOSPI'); f = fx(); c = coins(); md = f'{TODAY.month}월 {TODAY.day}일'
+    try: hist = index_hist('KOSPI', 60)
+    except Exception as e: print('  지수 기록 없음:', e); hist = []
     caps = []
     for code, nm in BIGCAPS:
         try: b = stock_basic(code); caps.append((nm, b['ratio']))
         except Exception as e: print('  종목 건너뜀', nm, e)
-    sc = []; word = updown(k['ratio'])
-    hook_sub = None
-    if fl:
-        fd, fs = eok(fl['foreign']); hook_sub = f"외국인 {'순매수' if fl['foreign'] > 0 else '순매도'} {fd.lstrip('+−')}"
-    sc.append(dict(type='hook', kicker=f'{md} 마감', title=f"코스피\n{pct(k['ratio'])} {word}", sub=hook_sub or '오늘 장 1분 정리',
-                   say=R.choice([f'{md} 코스피는 {pct_say(k["ratio"])} {updown_say(k["ratio"])}습니다. 오늘 장을 숫자로 정리합니다.',
-                                 f'오늘 코스피, {pct_say(k["ratio"])} {"올랐" if k["ratio"] > 0 else "떨어졌"}습니다. 1분 시황 시작합니다.'])))
+    sc = []; word = updown(k['ratio']); st_n, st_s = streak([h[2] for h in hist]) if hist else (0, 0)
+    hook_sub = (f"{st_n}거래일 연속 {'상승' if st_s > 0 else '하락'}" if st_n >= 2 else None)
+    if fl and not hook_sub:
+        fd, _ = eok(fl['foreign']); hook_sub = f"외국인 {'순매수' if fl['foreign'] > 0 else '순매도'} {fd.lstrip('+−')}"
+    hook_say = f'{md} 코스피는 {pct_say(k["ratio"])} {updown_say(k["ratio"])}습니다.'
+    if st_n >= 2: hook_say += f' {st_n}거래일 연속 {"상승" if st_s > 0 else "하락"}입니다.'
+    sc.append(dict(type='hook', icon='chart_up' if k['ratio'] >= 0 else 'chart_down', kicker=f'{md} 마감', title=f"코스피\n{pct(k['ratio'])} {word}", sub=hook_sub or '오늘 장 1분 정리', say=hook_say))
     items = [dict(label='코스피', value=f"{k['close']:,.2f}", change=pct(k['ratio']))]; say = f'코스피는 {int(k["close"])}포인트'
-    if q: items.append(dict(label='코스닥', value=f"{q['close']:,.2f}", change=pct(q['ratio']))); say += f', 코스닥은 {int(q["close"])}포인트로 각각 {pct_say(k["ratio"])}, {pct_say(q["ratio"])} {updown_say(q["ratio"]) if (k["ratio"] > 0) == (q["ratio"] > 0) else "움직였"}습니다.'
-    else: say += f'로 마감했습니다.'
-    sc.append(dict(type='stats', title='지수 마감', items=items, say=say))
+    if q:
+        items.append(dict(label='코스닥', value=f"{q['close']:,.2f}", change=pct(q['ratio'])))
+        say += f', 코스닥은 {int(q["close"])}포인트로 {pct_say(q["ratio"])} {updown_say(q["ratio"])}습니다.'
+    else: say += '로 마감했습니다.'
+    sc.append(dict(type='stats', title='지수 마감', icon='chart', items=items, say=say))
+    if len(hist) >= 20:
+        h20 = hist[-20:]; r20 = (h20[-1][1] / h20[0][1] - 1) * 100; hi60 = max(x[1] for x in hist); from_hi = (k['close'] / hi60 - 1) * 100
+        note = f'20거래일 {pct(r20, 1)}' + (f' · 최근 3개월 최고치 대비 {pct(from_hi, 1)}' if from_hi < -.5 else ' · 최근 3개월 최고치 부근')
+        sc.append(dict(type='chart', title='코스피 최근 한 달', unit='종가 기준', values=[round(x[1], 2) for x in h20], fmt='{:,.0f}',
+                       start=f"{int(h20[0][0][5:7])}월 {int(h20[0][0][8:])}일", end_label=md, note=note,
+                       say=f'최근 한 달 동안 코스피는 {pct_say(r20, 1)} {updown_say(r20)}고, ' + (f'최근 3개월 최고치보다 {pct_say(abs(from_hi), 1)} 낮습니다.' if from_hi < -.5 else '최근 3개월 최고치 부근입니다.')))
     if fl:
         parts = [('개인', fl['personal']), ('외국인', fl['foreign']), ('기관', fl['inst'])]
         its = [dict(label=n, value=v, text=eok(v)[0], color=SH.UP if v > 0 else SH.DOWN) for n, v in parts]
-        buy = [f'{n}이 {eok(v)[1]}' if n != '개인' else f'개인이 {eok(v)[1]}' for n, v in parts if v > 0]; sell = [f'{n}이 {eok(v)[1]}' for n, v in parts if v < 0]
-        say = ''
-        if sell: say += ', '.join(sell) + '어치를 팔았고, '
-        if buy: say += ', '.join(buy) + '어치를 샀습니다.'
-        sc.append(dict(type='bars', title='코스피 누가 사고 팔았나', unit='단위: 억 원 (순매수 +, 순매도 −)', items=its, say=say.rstrip(', ') or '수급은 엇갈렸습니다.'))
+        sell = [f'{josa(n, "이", "가")} {eok(v)[1]}' for n, v in parts if v < 0]; buy = [f'{josa(n, "이", "가")} {eok(v)[1]}' for n, v in parts if v > 0]
+        say = (', '.join(sell) + '어치를 팔았고, ' if sell else '') + (', '.join(buy) + '어치를 샀습니다.' if buy else '')
+        sc.append(dict(type='bars', title='코스피, 누가 사고 팔았나', icon='won', unit='단위: 억 원 (순매수 +, 순매도 −)', items=its, say=say.rstrip(', ') or '수급은 엇갈렸습니다.'))
     if len(caps) >= 4:
         caps.sort(key=lambda x: -x[1]); pick = caps[:2] + caps[-2:]
         its = [dict(label=n, value=r, text=pct(r), color=SH.UP if r > 0 else SH.DOWN) for n, r in pick]
         say = f'대형주 중에서는 {josa(pick[0][0], "이", "가")} {pct_say(pick[0][1])} {updown_say(pick[0][1])}고, {josa(pick[-1][0], "은", "는")} {pct_say(pick[-1][1])} {updown_say(pick[-1][1])}습니다.'
-        sc.append(dict(type='bars', title='대형주 등락 상위·하위', unit='전일 대비 등락률', items=its, say=say))
+        sc.append(dict(type='bars', title='대형주 등락 상위·하위', icon='search', unit='전일 대비 등락률', items=its, say=say))
     its = []; say = []
     if f: its.append(dict(label='원·달러 환율', value=f"{f['close']:,.1f}원", change=f"{'+' if f['diff'] > 0 else ''}{f['diff']:.1f}원")); say.append(f'원 달러 환율은 {f["close"]:.0f}원')
     if c:
         b, e = c.get('KRW-BTC'), c.get('KRW-ETH')
         if b: its.append(dict(label='비트코인', value=f"{b['price'] / 10000:,.0f}만원", change=pct(b['ratio']))); say.append(f'비트코인은 {won_say(b["price"] // 10000 * 10000)}')
         if e: its.append(dict(label='이더리움', value=f"{e['price'] / 10000:,.0f}만원", change=pct(e['ratio'])))
-    if its: sc.append(dict(type='stats', title='환율 · 코인', items=its, say=', '.join(say) + '입니다.'))
-    sc.append(dict(type='end', title='투자 판단은 신중하게', sub='내일도 장 마감 후 1분 시황', disclaimer=DISC_MKT, say='정보 제공용 영상입니다. 내일도 장 마감 후 정리해 드릴게요.'))
+    if its: sc.append(dict(type='stats', title='환율 · 코인', icon='coin', items=its, say=', '.join(say) + '입니다.'))
+    sc.append(dict(type='end', title='투자 판단은 신중하게', sub='내일도 장 마감 후 1분 시황', disclaimer=DISC_MKT, say='정보 제공용 영상입니다. 구독해 두시면 내일도 장 마감 후 정리해 드릴게요.'))
+    tick = [f"코스피 {k['close']:,.2f} {arrow_s(k['ratio'])}{abs(k['ratio']):.2f}%"] + ([f"코스닥 {q['close']:,.2f} {arrow_s(q['ratio'])}{abs(q['ratio']):.2f}%"] if q else []) + \
+           [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in caps] + ([f"USD/KRW {f['close']:,.1f}"] if f else []) + \
+           ([f"BTC {c['KRW-BTC']['price'] / 10000:,.0f}만 {arrow_s(c['KRW-BTC']['ratio'])}{abs(c['KRW-BTC']['ratio']):.2f}%"] if c and c.get('KRW-BTC') else [])
     tags = ['코스피', '코스닥', '주식 시황', '오늘의 증시', '증시 마감', '환율', '비트코인', '코인 시세', '주식', '쇼츠']
-    return dict(category='market', date=TODAY.strftime('%Y.%m.%d'), name=f'market_{TODAY:%Y%m%d}', rate='+12%', disclaimer=DISC_MKT,
+    return dict(category='market', date=TODAY.strftime('%Y.%m.%d'), name=f'market_{TODAY:%Y%m%d}', rate='+12%', disclaimer=DISC_MKT, ticker=tick,
+                thumb_title=f'{md}\n코스피', thumb_big=pct(k['ratio']),
                 source_line=f'데이터: 네이버 증권 · 업비트 ({TODAY:%m.%d} 마감 기준)', scenes=sc,
                 sources=['네이버 증권 (지수·투자자별 매매·환율·종목 시세) https://m.stock.naver.com', '업비트 (코인 시세, 전일 대비) https://upbit.com'],
-                yt=dict(title=f"코스피 {pct(k['ratio'])} {word} | {md} 1분 시황", desc=f'{md} 국내 증시 마감 숫자를 1분으로 정리했습니다. (지수·수급·대형주·환율·코인)', tags=tags))
+                yt=dict(title=f"코스피 {pct(k['ratio'])} {word}" + (f", {hook_sub}" if hook_sub and '연속' in hook_sub else '') + f" | {md} 1분 시황",
+                        desc=f'{md} 국내 증시 마감 숫자를 1분으로 정리했습니다. (지수·한 달 흐름·수급·대형주·환율·코인)', tags=tags))
 
 
-def write_stock(R, idx):
+def arrow_s(r): return '▲' if r > 0 else '▼' if r < 0 else ''
+
+
+def write_stock(R, idx, last_code=None):
+    if last_code in [c for c, _ in STOCKS]: idx = [c for c, _ in STOCKS].index(last_code) + 1     # 마지막으로 다룬 종목 다음부터
     for j in range(len(STOCKS)):
         code, nm = STOCKS[(idx + j) % len(STOCKS)]
         try:
-            b = stock_basic(code); info = stock_info(code); h = history(code, 260)
+            b = stock_basic(code); raw = jget(f'https://m.stock.naver.com/api/stock/{code}/integration'); info = {x['code']: x['value'] for x in raw.get('totalInfos', [])}; h = history(code, 260)
             if len(h) >= 130: break
         except Exception as e: print('  종목 데이터 실패', nm, e)
     else: return None
-    closes = [x[1] for x in h]; last = closes[-1]; d0 = h[-1][0]; date = f'{int(d0[4:6])}월 {int(d0[6:])}일'
+    # 화면의 '종가·등락률'은 네이버 공식 값(KRX)을 씀. 일별 차트 데이터에는 장 마감 뒤 거래가 섞일 수 있어 차트·기간 수익률에만 사용
+    live = h[-1][0] == TODAY.strftime('%Y%m%d') and (NOW.hour, NOW.minute) < (15, 45)      # 장중: 오늘 줄은 종가가 아님 → 전날 공식 종가 기준
+    if live:
+        h = h[:-1]; last_official = num(info.get('lastClosePrice', h[-1][1])); same_day = False
+    else:
+        last_official = b['close']; same_day = b['date'] == TODAY.isoformat() and h[-1][0] == TODAY.strftime('%Y%m%d')
+    closes = [x[1] for x in h]; closes[-1] = last_official; last = last_official
+    d0 = h[-1][0]; date = f'{int(d0[4:6])}월 {int(d0[6:])}일'; about = ABOUT.get(code, '')
+    peers_ok = same_day
     ret = lambda k: (last / closes[-1 - k] - 1) * 100 if len(closes) > k else None
     r1, r3, r6, r12 = ret(21), ret(63), ret(126), ret(len(closes) - 1)
     hi52 = num(info.get('highPriceOf52Weeks', max(closes))); lo52 = num(info.get('lowPriceOf52Weeks', min(closes)))
     from_hi = (last / hi52 - 1) * 100 if hi52 else None
     ser = closes[-126:]; ma_all = [None if i < 19 else sum(closes[i - 19:i + 1]) / 20 for i in range(len(closes))]; ma = ma_all[-126:]
-    vol20 = sum(x[2] for x in h[-21:-1]) / 20; vol_x = h[-1][2] / vol20 if vol20 else None
-    sc = [dict(type='hook', kicker=f'종목 분석 · {date} 종가 기준', title=f'{nm}\n지금 어디쯤?', sub='숫자로만 보는 1분 점검',
-               say=R.choice([f'{nm}, 지금 주가는 어디쯤일까요? 숫자로만 1분 점검합니다.', f'오늘은 {nm}입니다. 감정 빼고 숫자로만 보겠습니다.'])),
-          dict(type='stat', label=f'{date} 종가', value=f'{last:,.0f}원', change=pct(b['ratio']) if b['date'] == f'{d0[:4]}-{d0[4:6]}-{d0[6:]}' else None,
+    sc = [dict(type='hook', icon='search', kicker=f'종목 분석 · {date} 종가 기준', title=f'{nm}\n지금 어디쯤?', sub=(about + ' 회사') if about else '숫자로만 보는 1분 점검',
+               say=(f'{nm}, {about} 회사죠. ' if about else f'{nm}, ') + '지금 주가는 어디쯤일까요?'),
+          dict(type='stat', label=f'{date} 종가', value=f'{last:,.0f}원', change=pct(b['ratio']) if same_day else None,
                sub=f"52주 최고 {hi52:,.0f}원 · 최저 {lo52:,.0f}원",
-               say=f'{date} 종가는 {won_say(last)}' + (f', 하루 동안 {pct_say(b["ratio"])} {updown_say(b["ratio"])}습니다.' if b['date'] == f'{d0[:4]}-{d0[4:6]}-{d0[6:]}' else '입니다.')),
+               say=f'{date} 종가는 {won_say(last)}' + (f', 하루 동안 {pct_say(b["ratio"])} {updown_say(b["ratio"])}습니다.' if same_day else '입니다.') + (f' 52주 최고가보다 {pct_say(abs(from_hi), 0)} 낮은 가격이에요.' if from_hi is not None and from_hi < -.5 else ' 52주 최고가 근처예요.')),
           dict(type='chart', title='최근 6개월 주가', unit='흰 선: 20일 평균', values=[round(x) for x in ser], ma=[None if m is None else round(m) for m in ma],
                start=f'{int(h[-126][0][4:6])}월 {int(h[-126][0][6:])}일', end_label=date, note=f'6개월 {pct(r6, 1)}' if r6 is not None else '',
-               say=f'최근 6개월 동안 {pct_say(r6, 1)} {updown_say(r6)}습니다.' + (' 지금은 20일 평균선 ' + ('위' if last > ma[-1] else '아래') + '에 있습니다.' if ma[-1] else ''))]
+               say=f'최근 6개월 동안 {pct_say(r6, 1)} {updown_say(r6)}고, 지금은 20일 평균선 ' + ('위' if ma[-1] and last > ma[-1] else '아래') + '에 있습니다.')]
     per = [(l, v) for l, v in (('1개월', r1), ('3개월', r3), ('1년', r12)) if v is not None]
     ud = lambda r: '상승' if r > 0 else '하락' if r < 0 else '보합'
-    sc.append(dict(type='stats', title='기간별 수익률', items=[dict(label='기간', value=l, change=pct(v, 1)) for l, v in per],
+    sc.append(dict(type='stats', title='기간별 수익률', icon='calendar', items=[dict(label='기간', value=l, change=pct(v, 1)) for l, v in per],
                    say=', '.join(f'{l} {pct_say(v, 1)} {ud(v)}' for l, v in per) + '입니다.'))
-    val = [(k, l) for k, l in (('marketValue', '시가총액'), ('per', 'PER (주가수익비율)'), ('pbr', 'PBR (주가순자산비율)'), ('dividendYieldRatio', '배당수익률')) if info.get(k)]
-    if len(val) >= 2:
-        sc.append(dict(type='stats', title='가치 지표 (네이버 증권)', items=[dict(label=l, value=info[k]) for k, l in val[:4]],
-                       say=' '.join([f'시가총액은 {info["marketValue"].replace(",", "")}' + ('원,' if info.get('per') else '원입니다.') if info.get('marketValue') else '',
-                                     f'PER은 {info["per"].replace("배", "")}배' + (',' if info.get('pbr') else '입니다.') if info.get('per') else '',
-                                     f'PBR은 {info["pbr"].replace("배", "")}배입니다.' if info.get('pbr') else '']).strip()))
-    pos = f'52주 최고가보다 {pct_say(abs(from_hi), 1)} 낮은 수준' if from_hi is not None and from_hi < -.5 else '52주 최고가 근처'
-    sc.append(dict(type='bullets', title='오늘의 숫자 정리', items=[f'52주 위치|{pos}', f'거래량|20일 평균의 {vol_x:.1f}배' if vol_x else '거래량|데이터 없음', f'20일 평균선|' + ('위' if ma[-1] and last > ma[-1] else '아래') + '에 있음'],
-                   say=f'지금 주가는 {pos}이고, 오늘 거래량은 20일 평균의 {vol_x:.1f}배였습니다.' if vol_x else f'지금 주가는 {pos}입니다.'))
-    sc.append(dict(type='end', title='숫자는 참고만', sub='내일은 다른 종목을 살펴볼게요', disclaimer=DISC_STK, say='특정 종목을 권하는 영상이 아닙니다. 판단은 직접 하세요.'))
-    return dict(category='stock', date=TODAY.strftime('%Y.%m.%d'), name=f'stock_{code}_{TODAY:%Y%m%d}', rate='+12%', disclaimer=DISC_STK, stock=code,
+    peers = [(p['stockName'], num(p['fluctuationsRatio'])) for p in (raw.get('industryCompareInfo') or []) if p.get('itemCode') != code and p.get('fluctuationsRatio') not in (None, 'N/A')][:3]
+    if len(peers) >= 2 and peers_ok:
+        allp = [(nm, b['ratio'])] + peers
+        sc.append(dict(type='bars', title='같은 업종, 오늘은?', icon='chart', unit='전일 대비 등락률 (네이버 증권 업종 비교)', items=[dict(label=n + (' ◀' if n == nm else ''), value=r, text=pct(r), color=SH.UP if r > 0 else SH.DOWN) for n, r in allp],
+                       say=f'같은 업종에서는 ' + ', '.join(f'{josa(n, "이", "가")} {pct_say(r)}' for n, r in peers[:2]) + ' 움직였습니다.'))
+    deals = (raw.get('dealTrendInfos') or [])[:5]
+    if len(deals) >= 3:
+        fq = [num(x['foreignerPureBuyQuant']) for x in deals]; oq = [num(x['organPureBuyQuant']) for x in deals]
+        fb, ob = sum(1 for v in fq if v > 0), sum(1 for v in oq if v > 0); nd = len(deals)
+        qs = lambda v: (f"{'+' if v > 0 else '−'}{abs(v) / 10000:,.1f}만 주" if abs(v) >= 10000 else f"{'+' if v > 0 else '−'}{abs(v):,.0f}주")
+        sc.append(dict(type='stats', title=f'최근 {nd}거래일 수급', icon='won', items=[dict(label=f'외국인 · {nd}일 중 {fb}일 순매수', value=qs(sum(fq)), change=None), dict(label=f'기관 · {nd}일 중 {ob}일 순매수', value=qs(sum(oq)), change=None)],
+                       say=f'최근 {nd}거래일 동안 외국인은 {fb}일 순매수해 합계 {"순매수" if sum(fq) > 0 else "순매도"}, 기관은 {ob}일 순매수해 합계 {"순매수" if sum(oq) > 0 else "순매도"}였습니다.'))
+    ok_ = lambda k: info.get(k) and re.search(r'\d', info[k]) and 'N/A' not in info[k]
+    val = [(k, l) for k, l in (('per', 'PER (주가수익비율)'), ('pbr', 'PBR (주가순자산비율)'), ('dividendYieldRatio', '배당수익률')) if ok_(k)]
+    if len(val) >= 2 and len(sc) < 6:
+        sv = [f'PER {info["per"].replace("배", "")}배' if ok_('per') else '', f'PBR {info["pbr"].replace("배", "")}배' if ok_('pbr') else '', f'배당수익률 {info["dividendYieldRatio"].replace("%", "퍼센트")}' if ok_('dividendYieldRatio') else '']
+        sc.append(dict(type='stats', title='가치 지표', icon='bulb', items=[dict(label=l, value=info[k]) for k, l in val],
+                       say=', '.join(x for x in sv if x) + '입니다.'))
+    sc.append(dict(type='end', title='숫자는 참고만', sub='내일은 다른 종목을 살펴볼게요', disclaimer=DISC_STK, say='특정 종목을 권하는 영상이 아닙니다. 구독하시면 매일 한 종목씩 살펴볼게요.'))
+    tick = [f"{nm} {last:,.0f} {arrow_s(b['ratio'])}{abs(b['ratio']):.2f}%"] + [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in peers] + [f"52주 최고 {hi52:,.0f}", f"52주 최저 {lo52:,.0f}"] + \
+           ([f"시총 {info['marketValue']}"] if info.get('marketValue') else [])
+    return dict(category='stock', date=TODAY.strftime('%Y.%m.%d'), name=f'stock_{code}_{TODAY:%Y%m%d}', rate='+14%', disclaimer=DISC_STK, stock=code, ticker=tick,
+                thumb_title=f'{nm}\n지금 어디쯤?', thumb_big=f'6개월 {pct(r6, 1)}' if r6 is not None else None,
                 source_line=f'데이터: 네이버 증권 ({date} 종가 기준)', scenes=sc, sources=[f'네이버 증권 {nm} https://m.stock.naver.com/domestic/stock/{code}/total'],
-                yt=dict(title=f'{nm} 주가, 지금 어디쯤? 6개월 {pct(r6, 1)} | 종목 분석', desc=f'{nm}의 최근 주가 흐름과 기간별 수익률, 가치 지표를 숫자로만 정리했습니다. ({date} 종가 기준)',
+                yt=dict(title=f'{nm} 주가, 지금 어디쯤? 6개월 {pct(r6, 1)} | 종목 분석', desc=f'{nm}의 최근 주가 흐름, 기간별 수익률, 같은 업종 비교, 외국인·기관 수급, 가치 지표를 숫자로만 정리했습니다. ({date} 종가 기준)',
                         tags=[nm, f'{nm} 주가', f'{nm} 주식', '종목 분석', '주식', '주가', '코스피', '주식 공부', '재테크', '쇼츠']))
 
 
@@ -283,7 +341,8 @@ def main():
         order = [want] if want in ROTATION else ROTATION[(ROTATION.index(next((v['cat'] for v in db if v['cat'] in ROTATION), 'life')) + 1) % 3:] + ROTATION
         for cat in order:
             n_cat = sum(1 for v in db if v['cat'] == cat)
-            S = write_market(R) if cat == 'market' else write_stock(R, n_cat) if cat == 'stock' else write_life(n_cat)
+            last_code = next((v.get('stock') for v in db if v['cat'] == 'stock' and v.get('stock')), None)
+            S = write_market(R) if cat == 'market' else write_stock(R, n_cat, last_code) if cat == 'stock' else write_life(n_cat)
             if S: break
             print(f'  {cat}: 오늘은 만들 수 없음 (장 휴장 등) → 다음 주제')
     if not S: print('만들 대본이 없습니다'); return
