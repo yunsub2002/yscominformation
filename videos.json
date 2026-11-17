@@ -1,5 +1,19 @@
 [
  {
+  "cat": "life",
+  "name": "life_phishing_20261117",
+  "title": "보이스피싱 당했다면 이 순서대로! 112 → 지급정지 → 1332",
+  "desc": "돈을 보냈거나 링크를 눌렀다면 바로 해야 할 일을 순서대로 정리했습니다.\n\n📌 출처\n- 토스뱅크, 「경찰청 보이스피싱 대처 매뉴얼」(경찰청·전기통신금융사기 통합대응단·금융감독원 자료 참고) https://www.tossbank.com/articles/police-voice-phishing-manual\n\n이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n\n#보이스피싱 #보이스피싱대처 #지급정지 #스미싱 #명의도용 #생활꿀팁 #금융사기 #112",
+  "tags": "보이스피싱, 보이스피싱 대처, 지급정지, 스미싱, 명의도용, 생활 꿀팁, 금융 사기, 112, 1332, 쇼츠",
+  "date": "2026-11-17",
+  "sec": 57.3,
+  "mb": 8.9,
+  "url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261117-1607/life_phishing_20261117.mp4",
+  "thumb": "thumbs/life_phishing_20261117_thumb.jpg",
+  "thumb_url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261117-1607/life_phishing_20261117_thumb.jpg",
+  "stock": null
+ },
+ {
   "cat": "stock",
   "name": "stock_000660_20261117",
   "title": "SK하이닉스 주가, 지금 어디쯤? 6개월 -44.5% | 종목 분석",
