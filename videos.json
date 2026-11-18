@@ -1,5 +1,19 @@
 [
  {
+  "cat": "life",
+  "name": "life_csat_20261118",
+  "title": "내일 수능날, 출근·교통 이렇게 바뀝니다 (수험생 아니어도 필수)",
+  "desc": "11월 19일 2027학년도 수능 당일 출근 시간 조정, 지하철 증편, 시험장 앞 차량 통제, 영어 듣기평가 시간 소음 통제, 수험생 주의사항을 교육부 발표 그대로 1분에 정리했습니다.\n\n📌 출처\n- 교육부·대한민국 정책브리핑, 「11월 19일 수능날, 출근시간 10시 이후로…시험장 200m 전방 차량 통제」(2026.10.20) https://www.korea.kr/news/policyNewsView.do?newsId=148973935\n- 노컷뉴스, 「수능 때 스마트안경 착용만 해도 부정행위」 https://www.nocutnews.co.kr/issue/hotissue/19564\n\n이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n\n#수능 #2027수능 #수능날출근시간 #수능교통 #영어듣기평가 #수험생 #수능준비물 #생활꿀팁",
+  "tags": "수능, 2027 수능, 수능날 출근시간, 수능 교통, 영어 듣기평가, 수험생, 수능 준비물, 생활 꿀팁, 11월 19일, 쇼츠",
+  "date": "2026-11-18",
+  "sec": 64.4,
+  "mb": 10.8,
+  "url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261118-152422/life_csat_20261118.mp4",
+  "thumb": "thumbs/life_csat_20261118_thumb.jpg",
+  "thumb_url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261118-152422/life_csat_20261118_thumb.jpg",
+  "stock": null
+ },
+ {
   "cat": "market",
   "name": "market_20261117",
   "title": "코스피 -2.59% 급락, 4거래일 연속 하락 | 11월 17일 1분 시황",
