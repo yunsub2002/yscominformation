@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """정보쇼츠 매일 자동 제작 (GitHub Actions 에서 매일 17:07 KST 실행)
-  1) queue/ 폴더에 대본(.json)이 있으면 그걸 먼저 만듭니다 (정치 브리핑처럼 채팅에서 만든 대본)
+  1) queue/ 폴더의 대본(.json)을 한 번에 전부 만듭니다 (한 편 끝날 때마다 바로 올림)
+     자동 대본 {"auto": "market"|"stock"|"life"} 은 실행 순간의 실제 숫자로 대본을 씀 (시황은 장 마감 뒤)
   2) 없으면 순서대로 돌아가며: 오늘의 시황 → 종목 분석 → 생활 꿀팁 (장이 열리지 않은 날은 시황을 건너뜀)
   3) 영상·썸네일을 GitHub Releases 에 올리고, videos.json · index.html(아이폰용 보관함)을 갱신
 시황·종목 대본은 네이버 증권·업비트에서 받은 '숫자'로만 씁니다. 원인 해석·전망·매수 권유는 넣지 않습니다.
@@ -301,7 +302,7 @@ details pre{white-space:pre-wrap;font:inherit;background:#0a0d18;padding:10px;bo
 .empty{color:var(--mut);padding:40px 0;text-align:center}.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#fff;color:#000;font-weight:700;padding:10px 18px;border-radius:999px;opacity:0;transition:.2s;pointer-events:none}
 .toast.on{opacity:1}
 </style></head><body><main><h1>📺 정보쇼츠 보관함</h1>
-<p class="s">매일 오후 5시쯤 새 쇼츠가 자동으로 올라옵니다. ⬇ 영상 받기 → 파일에 저장 → 사진에 저장 → YouTube 앱에서 업로드 → 📋 제목·설명·태그 붙여 넣기</p>
+<p class="s">매일 오후 5시쯤 새 쇼츠가 자동으로 올라오고, 대기열 대본은 올리는 즉시 한꺼번에 만들어집니다. ⬇ 영상 받기 → 파일에 저장 → 사진에 저장 → YouTube 앱에서 업로드 → 📋 제목·설명·태그 붙여 넣기</p>
 <div class="tabs" id="tabs"></div><div id="list"></div><div class="toast" id="toast">복사됨 ✓</div></main>
 <script>
 const DATA=__DATA__,TABS=__TABS__;let cur='all';try{cur=localStorage.getItem('tab')||'all'}catch(e){}
@@ -330,44 +331,99 @@ def render_page(db):
 
 
 # ───────────────────────────── 실행
-def main():
-    dbp = ROOT / 'videos.json'; db = json.loads(dbp.read_text(encoding='utf-8')) if dbp.exists() else []
-    want = (os.environ.get('CATEGORY') or 'auto').strip(); R = random.Random(int(NOW.strftime('%Y%m%d')))
-    S = None; qfile = None
-    queue = sorted((ROOT / 'queue').glob('*.json'))
-    if queue and want in ('auto', 'queue'):
-        qfile = queue[0]; S = json.loads(qfile.read_text(encoding='utf-8')); S.setdefault('name', qfile.stem); print(f'대기열 대본: {qfile.name}')
-    if S is None:
-        order = [want] if want in ROTATION else ROTATION[(ROTATION.index(next((v['cat'] for v in db if v['cat'] in ROTATION), 'life')) + 1) % 3:] + ROTATION
-        for cat in order:
-            n_cat = sum(1 for v in db if v['cat'] == cat)
-            last_code = next((v.get('stock') for v in db if v['cat'] == 'stock' and v.get('stock')), None)
-            S = write_market(R) if cat == 'market' else write_stock(R, n_cat, last_code) if cat == 'stock' else write_life(n_cat)
-            if S: break
-            print(f'  {cat}: 오늘은 만들 수 없음 (장 휴장 등) → 다음 주제')
-    if not S: print('만들 대본이 없습니다'); return
-    print(f"===== {S['category']} · {S['name']} =====", flush=True)
+def git_push(msg, add=(), rm=()):
+    """바뀐 파일을 커밋하고 올림 (중간에 저장소가 바뀌었으면 합친 뒤 다시 시도)"""
+    for f in rm: sh('git', 'rm', '-q', '--ignore-unmatch', str(f))
+    if add: sh('git', 'add', *add)
+    if subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT).returncode == 0: return
+    sh('git', 'commit', '-q', '-m', msg)
+    br = os.environ.get('GITHUB_REF_NAME') or 'main'
+    for k in range(5):
+        if subprocess.run(['git', 'push', 'origin', f'HEAD:{br}'], cwd=ROOT).returncode == 0: return
+        sh('git', 'pull', '--rebase', '-X', 'theirs', 'origin', br, check=False); time.sleep(3 * (k + 1))
+    raise RuntimeError('git push 실패')
+
+
+def rotation_state(db, cat):
+    n_cat = sum(1 for v in db if v['cat'] == cat)
+    last_code = next((v.get('stock') for v in db if v['cat'] == 'stock' and v.get('stock')), None)
+    return n_cat, last_code
+
+
+def from_queue(qfile, db, R):
+    """대기열 파일 → (상태, 대본)  상태: ok / wait(장 마감 뒤에 다시) / drop(지난 날짜 자동 대본)
+    자동 대본: {"auto": "market" | "stock" | "life", "date": "YYYY-MM-DD"} → 실행 순간의 실제 숫자로 대본을 만듦"""
+    S = json.loads(qfile.read_text(encoding='utf-8')); auto = S.get('auto')
+    if not auto:
+        S.setdefault('name', qfile.stem); return 'ok', S
+    if S.get('date') and S['date'] != TODAY.isoformat(): return 'drop', None
+    if auto == 'market':
+        if any(v.get('name') == f'market_{TODAY:%Y%m%d}' for v in db):
+            print('  오늘 시황은 이미 있음 → 종목 분석으로 대신 만듭니다'); auto = 'stock'
+        else:
+            M = write_market(R)
+            if M: return 'ok', M
+            now = dt.datetime.now(KST)
+            if TODAY.weekday() < 5 and now.hour < 16: return 'wait', None
+            print('  오늘은 장이 열리지 않음 → 종목 분석으로 대신 만듭니다'); auto = 'stock'
+    n_cat, last_code = rotation_state(db, 'stock' if auto == 'stock' else 'life')
+    if auto == 'stock': return 'ok', write_stock(R, n_cat, last_code)
+    if auto == 'life': return 'ok', write_life(n_cat)
+    raise ValueError(f'알 수 없는 auto 값: {auto}')
+
+
+def publish(S, db, qfile=None):
+    """대본 1개 → 영상 → 릴리스 → videos.json · index.html → 바로 올림 (여러 편이어도 한 편씩 저장됨)"""
+    print(f"\n===== {S['category']} · {S['name']} =====", flush=True)
     (ROOT / '_out').mkdir(exist_ok=True); (ROOT / '_out' / f"{S['name']}.json").write_text(json.dumps(S, ensure_ascii=False, indent=1), encoding='utf-8')
     res = SH.make(S, ROOT / '_out', name=S['name'])
     if os.environ.get('DRY') == '1': print('DRY: 업로드 생략'); return res
-    tag = f"info-{NOW:%Y%m%d-%H%M}"
-    sh('gh', 'release', 'create', tag, res['mp4'], res['thumb'], '--repo', REPO, '--title', f"정보쇼츠 {NOW:%Y-%m-%d} {TAB[S['category']][1]}", '--notes', res['title'])
+    now = dt.datetime.now(KST); tag = f"info-{now:%Y%m%d-%H%M%S}"                    # 여러 편을 연달아 만들어도 겹치지 않게 초 단위
+    sh('gh', 'release', 'create', tag, res['mp4'], res['thumb'], '--repo', REPO, '--title', f"정보쇼츠 {now:%Y-%m-%d} {TAB[S['category']][1]}", '--notes', res['title'])
     base = f'https://github.com/{REPO}/releases/download/{tag}/'
     (ROOT / 'thumbs').mkdir(exist_ok=True); tj = ROOT / 'thumbs' / res['thumb'].name
     sh('ffmpeg', '-y', '-loglevel', 'error', '-i', res['thumb'], '-vf', 'scale=360:-1', '-q:v', '4', tj)
     title, _, rest = res['body'].partition('\n\n')
-    db.insert(0, dict(cat=S['category'], name=S['name'], title=res['title'] or title, desc=rest.strip(), tags=', '.join(res['tags']), date=f'{NOW:%Y-%m-%d}', sec=res['sec'],
+    db.insert(0, dict(cat=S['category'], name=S['name'], title=res['title'] or title, desc=rest.strip(), tags=', '.join(res['tags']), date=f'{now:%Y-%m-%d}', sec=res['sec'],
                       mb=round(res['mp4'].stat().st_size / 1e6, 1), url=base + res['mp4'].name, thumb=f'thumbs/{tj.name}', thumb_url=base + res['thumb'].name, stock=S.get('stock')))
-    dbp.write_text(json.dumps(db, ensure_ascii=False, indent=1), encoding='utf-8'); render_page(db)
-    add = ['videos.json', 'index.html', 'thumbs']
-    if qfile: sh('git', 'rm', '-q', str(qfile.relative_to(ROOT)))
-    sh('git', 'add', *add); sh('git', 'commit', '-m', f"정보쇼츠 추가: {res['title'][:60]}")
-    br = os.environ.get('GITHUB_REF_NAME') or 'main'
-    for k in range(5):
-        if subprocess.run(['git', 'push', 'origin', f'HEAD:{br}'], cwd=ROOT).returncode == 0: break
-        sh('git', 'pull', '--rebase', '-X', 'theirs', 'origin', br, check=False)
-    else: raise RuntimeError('git push 실패')
-    user, rn = REPO.split('/'); print(f'\n완료 → https://{user}.github.io/{rn}/')
+    (ROOT / 'videos.json').write_text(json.dumps(db, ensure_ascii=False, indent=1), encoding='utf-8'); render_page(db)
+    git_push(f"정보쇼츠 추가: {res['title'][:60]}", ['videos.json', 'index.html', 'thumbs'], [qfile.relative_to(ROOT)] if qfile else [])
+    return res
+
+
+def main():
+    dbp = ROOT / 'videos.json'; db = json.loads(dbp.read_text(encoding='utf-8')) if dbp.exists() else []
+    want = (os.environ.get('CATEGORY') or 'auto').strip(); R = random.Random(int(NOW.strftime('%Y%m%d')))
+    made, waiting, failed = 0, [], []
+    queue = sorted((ROOT / 'queue').glob('*.json'))
+    if queue and want in ('auto', 'queue'):
+        print(f'대기열 대본 {len(queue)}개를 한 번에 만듭니다: ' + ', '.join(q.name for q in queue), flush=True)
+        for i, qfile in enumerate(queue, 1):
+            print(f'\n[{i}/{len(queue)}] {qfile.name}', flush=True)
+            try:
+                st, S = from_queue(qfile, db, R)
+                if st == 'wait':
+                    waiting.append(qfile.name); print('  장 마감(오후 4시) 전이라 대기열에 남겨 둡니다 → 오후 5시 7분 자동 실행 때 만들어집니다'); continue
+                if st == 'drop':
+                    print('  날짜가 지난 자동 대본이라 지웁니다'); git_push(f'지난 자동 대본 정리: {qfile.name}', rm=[qfile.relative_to(ROOT)]); continue
+                if not S: raise RuntimeError('대본을 만들지 못했습니다 (데이터 없음)')
+                publish(S, db, qfile); made += 1
+            except Exception as e:
+                import traceback; traceback.print_exc(); failed.append(qfile.name); print(f'  ✗ 실패: {qfile.name} → 다음 대본으로 넘어갑니다', flush=True)
+    if not made and not waiting and not failed and want != 'queue':                     # 대기열이 비었을 때만 평소 순서(시황 → 종목 → 꿀팁)
+        order = [want] if want in ROTATION else ROTATION[(ROTATION.index(next((v['cat'] for v in db if v['cat'] in ROTATION), 'life')) + 1) % 3:] + ROTATION
+        S = None
+        for cat in order:
+            n_cat, last_code = rotation_state(db, cat)
+            S = write_market(R) if cat == 'market' else write_stock(R, n_cat, last_code) if cat == 'stock' else write_life(n_cat)
+            if S: break
+            print(f'  {cat}: 오늘은 만들 수 없음 (장 휴장 등) → 다음 주제')
+        if not S: print('만들 대본이 없습니다'); return
+        publish(S, db); made += 1
+    user, rn = REPO.split('/')
+    print(f'\n===== 이번 실행: {made}편 완료' + (f' · 대기 {len(waiting)}편' if waiting else '') + (f' · 실패 {len(failed)}편 {failed}' if failed else '') + ' =====')
+    print(f'보관함 → https://{user}.github.io/{rn}/')
+    if failed: sys.exit(1)
 
 
 if __name__ == '__main__':
