@@ -156,8 +156,9 @@ def rich_line(d, xy, parts, font, maxw=None, align='left'):
 
 
 def chg_color(v):
-    try: f = float(str(v).replace('%', '').replace('+', '').replace(',', ''))
-    except ValueError: return FLAT
+    m = re.match(r'^\s*([+\-−]?)\s*([\d,]*\.?\d+)', str(v))                     # '+1.2%' · '-3.7원' · '−561' 처럼 단위가 붙어도 부호를 읽음
+    if not m: return FLAT
+    f = float(m.group(2).replace(',', '')) * (-1 if m.group(1) in ('-', '−') else 1)
     return UP if f > 0 else DOWN if f < 0 else FLAT
 
 

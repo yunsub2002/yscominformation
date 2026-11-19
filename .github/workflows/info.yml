@@ -2,7 +2,8 @@ name: 정보쇼츠 자동 제작
 
 on:
   schedule:
-    - cron: '7 8 * * *'          # 매일 17:07 (한국 시간) — 장 마감 뒤. 시황 → 종목 분석 → 생활 꿀팁 순서로 돌아감
+    - cron: '7 8 * * *'          # 매일 17:07 (한국 시간) — 국내 장 마감 뒤: 오늘의 시황 + (종목 분석 / 생활 꿀팁 번갈아)
+    - cron: '17 22 * * *'        # 매일 07:17 (한국 시간) — 뉴욕 장 마감 뒤: 뉴욕증시 + 미국 종목 1편
   push:
     branches: [main]
     paths: ['queue/**']          # 대기열에 대본을 올리면 바로 제작 (여러 편이면 한 번에 전부)
@@ -12,7 +13,7 @@ on:
         description: '주제 (auto = 순서대로)'
         type: choice
         default: auto
-        options: [auto, market, stock, life, queue, repair]
+        options: [auto, market, stock, life, usmarket, usstock, queue, repair]
 
 permissions:
   contents: write

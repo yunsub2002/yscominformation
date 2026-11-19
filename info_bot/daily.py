@@ -272,6 +272,158 @@ def write_stock(R, idx, last_code=None):
                         tags=[nm, f'{nm} 주가', f'{nm} 주식', '종목 분석', '주식', '주가', '코스피', '주식 공부', '재테크', '쇼츠']))
 
 
+
+# ───────────────────────────── 미국 증시 (네이버 증권 해외 시세)
+US_IDX = [('.DJI', '다우존스'), ('.INX', 'S&P 500'), ('.IXIC', '나스닥')]
+US_BIG = [('NVDA.O', '엔비디아'), ('AAPL.O', '애플'), ('MSFT.O', '마이크로소프트'), ('GOOGL.O', '알파벳'), ('AMZN.O', '아마존'), ('META.O', '메타'), ('TSLA.O', '테슬라'), ('AVGO.O', '브로드컴')]
+US_STOCKS = [('NVDA.O', '엔비디아', 'AI 반도체 GPU를 만드는'), ('TSLA.O', '테슬라', '전기차와 에너지 저장 장치를 만드는'), ('PLTR.O', '팔란티어', '데이터 분석·AI 소프트웨어를 만드는'),
+             ('AAPL.O', '애플', '아이폰과 맥을 만드는'), ('MSFT.O', '마이크로소프트', '윈도우와 클라우드 애저를 운영하는'), ('GOOGL.O', '알파벳', '구글 검색과 유튜브를 운영하는'),
+             ('AMZN.O', '아마존', '온라인 쇼핑과 클라우드 AWS를 운영하는'), ('META.O', '메타', '페이스북과 인스타그램을 운영하는'), ('AVGO.O', '브로드컴', 'AI 네트워크 반도체를 만드는'),
+             ('AMD.O', 'AMD', 'CPU와 AI 반도체를 만드는'), ('NFLX.O', '넷플릭스', '영상 스트리밍 서비스를 하는'), ('IONQ.K', '아이온큐', '양자컴퓨터를 만드는')]
+DISC_US = '정보 제공용 영상이며 투자 권유가 아닙니다. 해외 주식은 환율 변동 위험도 있습니다. 투자 판단과 책임은 본인에게 있습니다.'
+NAPI = 'https://api.stock.naver.com'
+
+
+def us_basic(code, kind='stock'):
+    b = jget(f'{NAPI}/{kind}/{code}/basic')
+    return dict(name=b.get('stockName') or b.get('indexName'), close=num(b['closePrice']), diff=num(b['compareToPreviousClosePrice']), ratio=num(b['fluctuationsRatio']),
+                date=b.get('localTradedAt', '')[:10], status=b.get('marketStatus'))
+
+
+def us_hist(code, kind='stock', pages=5):
+    """일별 종가 (오래된 날 → 최근): [(YYYY-MM-DD, 종가, 등락률)] — 한 번에 60일씩"""
+    out = []
+    for p in range(1, pages + 1):
+        try: rows = jget(f'{NAPI}/{kind}/{code}/price?page={p}&pageSize=60')
+        except Exception as e: print('  기록 일부 실패:', e); break
+        if not rows: break
+        out += [(r['localTradedAt'][:10], num(r['closePrice']), num(r['fluctuationsRatio'])) for r in rows]
+        if len(rows) < 60: break
+    seen = set(); res = []
+    for r in out:
+        if r[0] not in seen: seen.add(r[0]); res.append(r)
+    return res[::-1]
+
+
+def usd_say(v): return f'{v:,.2f}달러'.replace(',', '') if v < 1000 else f'{v:,.0f}달러'.replace(',', '')
+def md_of(d): return f'{int(d[5:7])}월 {int(d[8:10])}일'
+
+
+def write_usmarket(R, db=()):
+    idx = {}
+    for code, nm in US_IDX + [('.SOX', '필라델피아 반도체')]:
+        try: idx[code] = us_basic(code, 'index')
+        except Exception as e: print('  지수 실패', nm, e)
+    if '.IXIC' not in idx or '.INX' not in idx: return None
+    d = idx['.INX']['date']; md = md_of(d); name = f'usmarket_{d.replace("-", "")}'
+    if any(v.get('name') == name for v in db): print('  이 날짜 뉴욕증시는 이미 만들었음'); return None
+    n_, s_ = idx['.IXIC'], idx['.INX']
+    try: hist = us_hist('.INX', 'index', 2)
+    except Exception as e: print('  지수 기록 없음:', e); hist = []
+    caps = []
+    for code, nm in US_BIG:
+        try: b = us_basic(code); caps.append((nm, b['ratio'])) if b['date'] == d else None
+        except Exception as e: print('  종목 건너뜀', nm, e)
+    f = fx(); word = updown(n_['ratio']); st_n, st_s = streak([h[2] for h in hist]) if hist else (0, 0)
+    hook_sub = f"S&P 500 {st_n}거래일 연속 {'상승' if st_s > 0 else '하락'}" if st_n >= 3 else f"S&P 500 {pct(s_['ratio'])}"
+    sc = [dict(type='hook', icon='chart_up' if n_['ratio'] >= 0 else 'chart_down', kicker=f'뉴욕증시 · 현지 {md} 마감', title=f"나스닥\n{pct(n_['ratio'])} {word}", sub=hook_sub,
+               headline=f"뉴욕증시 마감, 나스닥 {pct(n_['ratio'])}", panel='뉴욕증시',
+               say=f'간밤 뉴욕증시입니다. 현지 시각 {md}, 나스닥은 {pct_say(n_["ratio"])} {updown_say(n_["ratio"])}습니다.' + (f' S&P 500은 {st_n}거래일 연속 {"상승" if st_s > 0 else "하락"}입니다.' if st_n >= 3 else ''))]
+    items = [dict(label=nm, value=f"{idx[c]['close']:,.2f}", change=pct(idx[c]['ratio'])) for c, nm in US_IDX if c in idx]
+    say = ', '.join(f'{nm}{"는" if nm == "다우존스" else "은"} {pct_say(idx[c]["ratio"])} {updown_say(idx[c]["ratio"])}고' for c, nm in US_IDX if c in idx and c != '.IXIC')
+    sc.append(dict(type='stats', title='3대 지수 마감', icon='chart', headline='다우 · S&P 500 · 나스닥 마감', panel='3대 지수', items=items,
+                   say=(say.rstrip('고') + '습니다.') if say else '3대 지수 마감입니다.'))
+    if len(hist) >= 21:
+        h20 = hist[-21:]; r20 = (h20[-1][1] / h20[0][1] - 1) * 100; hi = max(x[1] for x in hist); from_hi = (s_['close'] / hi - 1) * 100
+        sc.append(dict(type='chart', title='S&P 500 최근 한 달', unit='종가 기준', values=[round(x[1], 2) for x in h20], fmt='{:,.0f}', start=md_of(h20[0][0]), end_label=md,
+                       note=f'한 달 {pct(r20, 1)}' + (f' · 최근 고점 대비 {pct(from_hi, 1)}' if from_hi < -.5 else ' · 최근 고점 부근'), headline=f'S&P 500 한 달 {pct(r20, 1)}', panel='한 달 흐름',
+                       say=f'최근 한 달 S&P 500은 {pct_say(r20, 1)} {updown_say(r20)}고, ' + (f'최근 고점보다 {pct_say(abs(from_hi), 1)} 낮습니다.' if from_hi < -.5 else '최근 고점 부근입니다.')))
+    if len(caps) >= 4:
+        caps.sort(key=lambda x: -x[1]); pick = caps[:2] + caps[-2:]
+        sc.append(dict(type='bars', title='빅테크 등락 상위·하위', icon='search', unit='전일 대비 등락률', headline=f'빅테크: {pick[0][0]} {pct(pick[0][1])}', panel='빅테크',
+                       items=[dict(label=n, value=r, text=pct(r), color=SH.UP if r > 0 else SH.DOWN) for n, r in pick],
+                       say=f'빅테크 중에서는 {josa(pick[0][0], "이", "가")} {pct_say(pick[0][1])} {updown_say(pick[0][1])}고, {josa(pick[-1][0], "은", "는")} {pct_say(pick[-1][1])} {updown_say(pick[-1][1])}습니다.'))
+    its = []; say = []
+    if '.SOX' in idx: its.append(dict(label='필라델피아 반도체', value=f"{idx['.SOX']['close']:,.2f}", change=pct(idx['.SOX']['ratio']))); say.append(f'반도체 지수는 {pct_say(idx[".SOX"]["ratio"])} {updown_say(idx[".SOX"]["ratio"])}고')
+    if f: its.append(dict(label='원·달러 환율', value=f"{f['close']:,.1f}원", change=f"{'+' if f['diff'] > 0 else ''}{f['diff']:.1f}원")); say.append(f'원 달러 환율은 {f["close"]:.0f}원입니다')
+    if its: sc.append(dict(type='stats', title='반도체 · 환율', icon='coin', headline='반도체 지수 · 원달러 환율', panel='반도체·환율', items=its, say=(', '.join(say) + '.').replace('고.', '습니다.')))
+    sc.append(dict(type='end', title='투자 판단은 신중하게', sub='매일 아침 뉴욕증시 1분 정리', disclaimer=DISC_US, headline='매일 아침 뉴욕증시 정리', panel='세모 뉴스',
+                   say='정보 제공용 영상입니다. 구독하시면 매일 아침 뉴욕증시를 정리해 드릴게요.'))
+    tick = [f"{nm} {idx[c]['close']:,.2f} {arrow_s(idx[c]['ratio'])}{abs(idx[c]['ratio']):.2f}%" for c, nm in US_IDX + [('.SOX', '반도체')] if c in idx] + \
+           [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in caps] + ([f"USD/KRW {f['close']:,.1f}"] if f else [])
+    return dict(category='market', date=TODAY.strftime('%Y.%m.%d'), name=name, rate='+12%', disclaimer=DISC_US, ticker=tick, header='뉴욕증시 마감', header_tag='마감',
+                anchor_role='세상의 모든 이야기 · 뉴욕증시', thumb_title='간밤 뉴욕증시\n나스닥', thumb_big=pct(n_['ratio']),
+                source_line=f'데이터: 네이버 증권 해외 시세 (현지 {d[5:7]}.{d[8:]} 종가)', scenes=sc,
+                sources=['네이버 증권 해외 지수·종목 시세 https://m.stock.naver.com/worldstock', '네이버 증권 원·달러 환율 https://m.stock.naver.com/marketindex'],
+                yt=dict(title=f"나스닥 {pct(n_['ratio'])} {word} | 간밤 뉴욕증시 1분 정리 ({md})", desc=f'현지 {md} 뉴욕증시 마감을 1분으로 정리했습니다. (3대 지수·S&P 500 한 달 흐름·빅테크·반도체·환율)',
+                        tags=['뉴욕증시', '미국주식', '나스닥', 'S&P500', '다우', '미국증시', '엔비디아', '테슬라', '해외주식', '쇼츠']))
+
+
+def write_usstock(R, idx=0, last_code=None, code=None):
+    codes = [c for c, _, _ in US_STOCKS]
+    if code: order = [next(x for x in US_STOCKS if x[0] == code)] if code in codes else [(code, None, '')]
+    else:
+        if last_code in codes: idx = codes.index(last_code) + 1
+        order = [US_STOCKS[(idx + j) % len(US_STOCKS)] for j in range(len(US_STOCKS))]
+    for code, nm, about in order:
+        try:
+            b = us_basic(code); raw = jget(f'{NAPI}/stock/{code}/integration'); h = us_hist(code, 'stock', 5)
+            nm = nm or b['name']
+            if len(h) >= 130: break
+        except Exception as e: print('  종목 데이터 실패', code, e)
+    else: return None
+    closes = [x[1] for x in h]; last = closes[-1] = b['close']; d = b['date'] or h[-1][0]; md = md_of(d); sym = code.split('.')[0]
+    ret = lambda k: (last / closes[-1 - k] - 1) * 100 if len(closes) > k else None
+    r1, r3, r6, r12 = ret(21), ret(63), ret(126), ret(min(252, len(closes) - 1))
+    w = closes[-252:]; hi52, lo52 = max(w), min(w); from_hi = (last / hi52 - 1) * 100
+    f = fx(); krw = last * f['close'] if f else None
+    ser = closes[-126:]; ma_all = [None if i < 19 else sum(closes[i - 19:i + 1]) / 20 for i in range(len(closes))]; ma = ma_all[-126:]; d0 = h[-126][0]
+    sc = [dict(type='hook', icon='search', kicker=f'미국 주식 · 현지 {md} 종가', title=f'{nm}\n지금 어디쯤?', sub=f'{about} 회사' if about else '숫자로 보는 1분 점검',
+               headline=f'{nm}({sym}) 주가 점검', panel=sym, say=(f'{nm}, {about} 회사죠. ' if about else f'{nm}, ') + '지금 주가는 어디쯤일까요?'),
+          dict(type='stat', label=f'현지 {md} 종가', value=f'${last:,.2f}', change=pct(b['ratio']), sub=(f'1주 약 {won_say(round(krw, -2))} · ' if krw else '') + f'1년 최고 ${hi52:,.2f}',
+               headline=f'종가 ${last:,.2f} ({pct(b["ratio"])})', panel='종가',
+               say=f'종가는 {usd_say(last)}, 하루 동안 {pct_say(b["ratio"])} {updown_say(b["ratio"])}습니다.' + (f' 우리 돈으로 1주에 약 {won_say(round(krw, -4))}이에요.' if krw else '') +
+                   (f' 1년 최고가보다는 {pct_say(abs(from_hi), 0)} 낮습니다.' if from_hi < -.5 else ' 1년 최고가 근처입니다.')),
+          dict(type='chart', title='최근 6개월 주가', unit='흰 선: 20일 평균 · 달러', values=[round(x, 2) for x in ser], ma=[None if m is None else round(m, 2) for m in ma], fmt='${:,.0f}',
+               start=md_of(d0), end_label=md, note=f'6개월 {pct(r6, 1)}' if r6 is not None else '', headline=f'6개월 {pct(r6, 1)}' if r6 is not None else '최근 6개월 흐름', panel='6개월 흐름',
+               say=f'최근 6개월 동안 {pct_say(r6, 1)} {updown_say(r6)}고, 지금은 20일 평균선 ' + ('위' if ma[-1] and last > ma[-1] else '아래') + '에 있습니다.')]
+    per = [(l, v) for l, v in (('1개월', r1), ('3개월', r3), ('1년', r12)) if v is not None]
+    ud = lambda r: '상승' if r > 0 else '하락' if r < 0 else '보합'
+    sc.append(dict(type='stats', title='기간별 수익률', icon='calendar', headline=' · '.join(f'{l} {pct(v, 1)}' for l, v in per), panel='기간 수익률',
+                   items=[dict(label='기간', value=l, change=pct(v, 1)) for l, v in per], say=', '.join(f'{l} {pct_say(v, 1)} {ud(v)}' for l, v in per) + '입니다.'))
+    peers = [(re.sub(r'\(.*?\)| ADR| Class [A-Z]', '', p['stockName']).strip(), num(p['fluctuationsRatio'])) for p in ((raw.get('industryCompareInfo') or {}).get('globalStocks') or [])
+             if p.get('reutersCode') != code and p.get('fluctuationsRatio') not in (None, 'N/A') and p.get('localTradedAt', '')[:10] == d][:3]
+    if len(peers) >= 2:
+        allp = [(nm, b['ratio'])] + peers
+        sc.append(dict(type='bars', title='같은 업종, 그날은?', icon='chart', unit='전일 대비 등락률 (네이버 증권 업종 비교)', headline='같은 업종 등락 비교', panel='업종 비교',
+                       items=[dict(label=n + (' ◀' if n == nm else ''), value=r, text=pct(r), color=SH.UP if r > 0 else SH.DOWN) for n, r in allp],
+                       say='같은 업종에서는 ' + ', '.join(f'{josa(n, "은", "는")} {pct_say(r)} {updown_say(r)}고' for n, r in peers[:2]).rstrip('고') + '습니다.'))
+    sc.append(dict(type='end', title='숫자는 참고만', sub='매일 한 종목씩 미국 주식 점검', disclaimer=DISC_US, headline='매일 미국 주식 한 종목', panel='세모 뉴스',
+                   say='특정 종목을 권하는 영상이 아닙니다. 구독하시면 매일 미국 주식 한 종목씩 살펴볼게요.'))
+    tick = [f"{nm} ${last:,.2f} {arrow_s(b['ratio'])}{abs(b['ratio']):.2f}%"] + [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in peers] + [f"1년 최고 ${hi52:,.2f}", f"1년 최저 ${lo52:,.2f}"] + \
+           ([f"USD/KRW {f['close']:,.1f}"] if f else [])
+    return dict(category='stock', date=TODAY.strftime('%Y.%m.%d'), name=f'usstock_{sym}_{TODAY:%Y%m%d}', rate='+12%', disclaimer=DISC_US, stock=code, ticker=tick,
+                header='미국 주식 분석', header_tag='해외', anchor_role='세상의 모든 이야기 · 미국 주식',
+                thumb_title=f'{nm}\n지금 어디쯤?', thumb_big=f'6개월 {pct(r6, 1)}' if r6 is not None else pct(b['ratio']),
+                source_line=f'데이터: 네이버 증권 해외 시세 (현지 {d[5:7]}.{d[8:]} 종가)', scenes=sc, sources=[f'네이버 증권 {nm} https://m.stock.naver.com/worldstock/stock/{code}/total'],
+                yt=dict(title=f'{nm}({sym}) 주가, 지금 어디쯤? 6개월 {pct(r6, 1)} | 미국 주식 1분 분석', desc=f'{nm}({sym})의 최근 주가 흐름, 기간별 수익률, 같은 업종 비교를 숫자로만 정리했습니다. (현지 {md} 종가 기준)',
+                        tags=[nm, f'{nm} 주가', sym, '미국주식', '해외주식', '나스닥', '주식 공부', '종목 분석', '재테크', '쇼츠']))
+
+
+def anchorize(S):
+    """모든 자동 대본을 앵커 진행으로: 남성 앵커 음성 + 장면별 헤드라인"""
+    if not S: return S
+    S['anchor'] = True; S['voice'] = 'ko-KR-InJoonNeural'
+    S.setdefault('header', {'market': '오늘의 시황', 'stock': '종목 분석', 'life': '생활 지식 속보'}.get(S['category'], '세모 뉴스'))
+    for sc in S['scenes']:
+        if sc.get('headline'): continue
+        k = sc['type']
+        sc['headline'] = (sc.get('title', '').replace('\n', ' ') if k in ('hook', 'end', 'bullets', 'stats', 'bars', 'chart', 'timeline', 'versus') else
+                          f"{sc.get('label', '')} {sc.get('value', '')}".strip() if k == 'stat' else ('퀴즈: ' + sc.get('question', '')) if k == 'quiz' else '')
+        if k == 'hook' and not sc.get('panel'): sc['panel'] = (sc.get('kicker') or '').split('·')[0].strip()[:8]
+    return S
+
+
 def write_life(idx):
     tips = json.loads((BOT / 'tips.json').read_text(encoding='utf-8'))
     S = dict(tips[idx % len(tips)]); S['name'] = f"life_{S.pop('id')}_{TODAY:%Y%m%d}"; return S
@@ -344,6 +496,25 @@ def git_push(msg, add=(), rm=()):
     raise RuntimeError('git push 실패')
 
 
+def us_rotation(db):
+    """미국 종목: 지금까지 만든 편수, 마지막 종목 코드"""
+    us = [v for v in db if '.' in str(v.get('stock') or '')]
+    return len(us), (us[0]['stock'] if us else None)
+
+
+def make_auto(kind, db, R):
+    """kind 하나 → 대본 (못 만들면 None)"""
+    if kind == 'usmarket': return anchorize(write_usmarket(R, db))
+    if kind == 'usstock': n, last = us_rotation(db); return anchorize(write_usstock(R, n, last))
+    if kind == 'market':
+        if any(v.get('name') == f'market_{TODAY:%Y%m%d}' for v in db): return None
+        return anchorize(write_market(R))
+    n_cat, last_code = rotation_state(db, kind)
+    if kind == 'stock': return anchorize(write_stock(R, n_cat, last_code))
+    if kind == 'life': return anchorize(write_life(n_cat))
+    return None
+
+
 def rotation_state(db, cat):
     n_cat = sum(1 for v in db if v['cat'] == cat)
     last_code = next((v.get('stock') for v in db if v['cat'] == 'stock' and v.get('stock')), None)
@@ -363,13 +534,17 @@ def from_queue(qfile, db, R):
             print('  오늘 시황은 이미 있음 → 종목 분석으로 대신 만듭니다'); auto = 'stock'
         else:
             M = write_market(R)
-            if M: return 'ok', M
+            if M: return 'ok', anchorize(M)
             now = dt.datetime.now(KST)
             if TODAY.weekday() < 5 and now.hour < 16: return 'wait', None
             print('  오늘은 장이 열리지 않음 → 종목 분석으로 대신 만듭니다'); auto = 'stock'
+    if auto == 'usmarket':
+        M = write_usmarket(R, db); return ('ok', anchorize(M)) if M else ('drop', None)
+    if auto == 'usstock':
+        n_us, last_us = us_rotation(db); return 'ok', anchorize(write_usstock(R, n_us, last_us, code=S.get('code')))
     n_cat, last_code = rotation_state(db, 'stock' if auto == 'stock' else 'life')
-    if auto == 'stock': return 'ok', write_stock(R, n_cat, last_code)
-    if auto == 'life': return 'ok', write_life(n_cat)
+    if auto == 'stock': return 'ok', anchorize(write_stock(R, n_cat, last_code))
+    if auto == 'life': return 'ok', anchorize(write_life(n_cat))
     raise ValueError(f'알 수 없는 auto 값: {auto}')
 
 
@@ -446,12 +621,24 @@ def main():
                 publish(S, db, qfile); made += 1
             except Exception as e:
                 import traceback; traceback.print_exc(); failed.append(qfile.name); print(f'  ✗ 실패: {qfile.name} → 다음 대본으로 넘어갑니다', flush=True)
+    sched = os.environ.get('GITHUB_EVENT_NAME') == 'schedule' and want == 'auto'
+    if sched or want in ('usmarket', 'usstock'):                                       # 매일 자동: 아침(한국 07시대) 미국 2편 · 저녁(17시대) 국내 2편
+        plan = [want] if want in ('usmarket', 'usstock') else (['usmarket', 'usstock'] if NOW.hour < 12 else ['market', 'stock' if TODAY.toordinal() % 2 else 'life'])
+        print('자동 제작 계획:', plan, flush=True)
+        for kind in plan:
+            try:
+                S = make_auto(kind, db, R)
+                if not S: print(f'  {kind}: 오늘은 만들 수 없음 (휴장·이미 만듦 등) → 건너뜀'); continue
+                publish(S, db); made += 1
+            except Exception:
+                import traceback; traceback.print_exc(); failed.append(kind)
+        made_fix = True                                                                 # 아래 예전 순서 제작은 하지 않음
     if not made and not waiting and not failed and not made_fix and want != 'queue':                     # 대기열이 비었을 때만 평소 순서(시황 → 종목 → 꿀팁)
         order = [want] if want in ROTATION else ROTATION[(ROTATION.index(next((v['cat'] for v in db if v['cat'] in ROTATION), 'life')) + 1) % 3:] + ROTATION
         S = None
         for cat in order:
             n_cat, last_code = rotation_state(db, cat)
-            S = write_market(R) if cat == 'market' else write_stock(R, n_cat, last_code) if cat == 'stock' else write_life(n_cat)
+            S = anchorize(write_market(R) if cat == 'market' else write_stock(R, n_cat, last_code) if cat == 'stock' else write_life(n_cat))
             if S: break
             print(f'  {cat}: 오늘은 만들 수 없음 (장 휴장 등) → 다음 주제')
         if not S: print('만들 대본이 없습니다'); return
