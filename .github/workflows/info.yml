@@ -12,7 +12,7 @@ on:
         description: '주제 (auto = 순서대로)'
         type: choice
         default: auto
-        options: [auto, market, stock, life, queue]
+        options: [auto, market, stock, life, queue, repair]
 
 permissions:
   contents: write

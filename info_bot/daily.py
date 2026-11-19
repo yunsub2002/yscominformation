@@ -7,7 +7,7 @@
 시황·종목 대본은 네이버 증권·업비트에서 받은 '숫자'로만 씁니다. 원인 해석·전망·매수 권유는 넣지 않습니다.
 환경변수: GH_TOKEN, GITHUB_REPOSITORY, CATEGORY(auto|market|stock|life|queue), DRY(1이면 업로드 안 함)
 """
-import datetime as dt, html, json, os, random, re, subprocess, sys, time, urllib.request
+import shutil, datetime as dt, html, json, os, random, re, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 BOT = Path(__file__).resolve().parent; ROOT = BOT.parent; sys.path.insert(0, str(BOT))
@@ -354,6 +354,7 @@ def from_queue(qfile, db, R):
     """대기열 파일 → (상태, 대본)  상태: ok / wait(장 마감 뒤에 다시) / drop(지난 날짜 자동 대본)
     자동 대본: {"auto": "market" | "stock" | "life", "date": "YYYY-MM-DD"} → 실행 순간의 실제 숫자로 대본을 만듦"""
     S = json.loads(qfile.read_text(encoding='utf-8')); auto = S.get('auto')
+    if auto == 'repair': return 'drop', None                                         # 링크 고치기 신호 파일 (고치기는 시작할 때 이미 함)
     if not auto:
         S.setdefault('name', qfile.stem); return 'ok', S
     if S.get('date') and S['date'] != TODAY.isoformat(): return 'drop', None
@@ -372,6 +373,35 @@ def from_queue(qfile, db, R):
     raise ValueError(f'알 수 없는 auto 값: {auto}')
 
 
+def ascii_copy(p):
+    """한글 등 영문이 아닌 글자를 뺀 이름으로 복사 (GitHub 릴리스 파일 이름 규칙)"""
+    p = Path(p); stem = re.sub(r'[^A-Za-z0-9._-]+', '', p.stem).strip('._-') or 'video'
+    stem = re.sub(r'_+', '_', stem); q = p.with_name(stem + p.suffix)
+    if q != p: shutil.copyfile(p, q)
+    return q
+
+
+def repair_links(db):
+    """예전에 한글 이름으로 올려서 링크가 깨진 영상 → 실제 올라간 파일 주소로 고침"""
+    bad = [v for v in db if any(ord(c) > 127 for c in (v.get('url', '') + v.get('thumb_url', '')))]
+    if not bad: return 0
+    print(f'링크 고치기: {len(bad)}편', flush=True); fixed = 0
+    for v in bad:
+        m = re.search(r'/releases/download/([^/]+)/', v.get('url', ''))
+        if not m: continue
+        r = subprocess.run(['gh', 'release', 'view', m.group(1), '--repo', REPO, '--json', 'assets'], cwd=ROOT, capture_output=True, text=True)
+        if r.returncode: print('  릴리스를 찾지 못함:', m.group(1), r.stderr[:200]); continue
+        assets = [f"https://github.com/{REPO}/releases/download/{m.group(1)}/{a['name']}" for a in json.loads(r.stdout).get('assets', []) if a.get('name')]
+        mp4 = next((a for a in assets if a.endswith('.mp4')), None); th = next((a for a in assets if a.endswith('.jpg')), None)
+        if mp4: v['url'] = mp4; fixed += 1
+        if th: v['thumb_url'] = th
+        print(f"  {v['name']} → {mp4}", flush=True)
+    if fixed:
+        (ROOT / 'videos.json').write_text(json.dumps(db, ensure_ascii=False, indent=1), encoding='utf-8'); render_page(db)
+        git_push(f'영상 링크 {fixed}편 고침', ['videos.json', 'index.html'])
+    return fixed
+
+
 def publish(S, db, qfile=None):
     """대본 1개 → 영상 → 릴리스 → videos.json · index.html → 바로 올림 (여러 편이어도 한 편씩 저장됨)"""
     print(f"\n===== {S['category']} · {S['name']} =====", flush=True)
@@ -379,6 +409,7 @@ def publish(S, db, qfile=None):
     res = SH.make(S, ROOT / '_out', name=S['name'])
     if os.environ.get('DRY') == '1': print('DRY: 업로드 생략'); return res
     now = dt.datetime.now(KST); tag = f"info-{now:%Y%m%d-%H%M%S}"                    # 여러 편을 연달아 만들어도 겹치지 않게 초 단위
+    res = dict(res, mp4=ascii_copy(res['mp4']), thumb=ascii_copy(res['thumb']))       # GitHub 는 파일 이름의 한글을 지워 버림 → 영문 이름으로 올려야 링크가 맞음
     sh('gh', 'release', 'create', tag, res['mp4'], res['thumb'], '--repo', REPO, '--title', f"정보쇼츠 {now:%Y-%m-%d} {TAB[S['category']][1]}", '--notes', res['title'])
     base = f'https://github.com/{REPO}/releases/download/{tag}/'
     (ROOT / 'thumbs').mkdir(exist_ok=True); tj = ROOT / 'thumbs' / res['thumb'].name
@@ -394,7 +425,10 @@ def publish(S, db, qfile=None):
 def main():
     dbp = ROOT / 'videos.json'; db = json.loads(dbp.read_text(encoding='utf-8')) if dbp.exists() else []
     want = (os.environ.get('CATEGORY') or 'auto').strip(); R = random.Random(int(NOW.strftime('%Y%m%d')))
-    made, waiting, failed = 0, [], []
+    try: repair_links(db)
+    except Exception as e: print('링크 고치기 실패(제작은 계속):', e, flush=True)
+    if want == 'repair': return
+    made, waiting, failed = 0, [], []; made_fix = False
     queue = sorted((ROOT / 'queue').glob('*.json'))
     if queue and want in ('auto', 'queue'):
         print(f'대기열 대본 {len(queue)}개를 한 번에 만듭니다: ' + ', '.join(q.name for q in queue), flush=True)
@@ -404,13 +438,15 @@ def main():
                 st, S = from_queue(qfile, db, R)
                 if st == 'wait':
                     waiting.append(qfile.name); print('  장 마감(오후 4시) 전이라 대기열에 남겨 둡니다 → 오후 5시 7분 자동 실행 때 만들어집니다'); continue
+                if st == 'drop' and '"repair"' in qfile.read_text(encoding='utf-8'):
+                    print('  링크 고치기 신호 파일 → 지웁니다'); git_push(f'링크 고치기 완료: {qfile.name}', rm=[qfile.relative_to(ROOT)]); made_fix = True; continue
                 if st == 'drop':
                     print('  날짜가 지난 자동 대본이라 지웁니다'); git_push(f'지난 자동 대본 정리: {qfile.name}', rm=[qfile.relative_to(ROOT)]); continue
                 if not S: raise RuntimeError('대본을 만들지 못했습니다 (데이터 없음)')
                 publish(S, db, qfile); made += 1
             except Exception as e:
                 import traceback; traceback.print_exc(); failed.append(qfile.name); print(f'  ✗ 실패: {qfile.name} → 다음 대본으로 넘어갑니다', flush=True)
-    if not made and not waiting and not failed and want != 'queue':                     # 대기열이 비었을 때만 평소 순서(시황 → 종목 → 꿀팁)
+    if not made and not waiting and not failed and not made_fix and want != 'queue':                     # 대기열이 비었을 때만 평소 순서(시황 → 종목 → 꿀팁)
         order = [want] if want in ROTATION else ROTATION[(ROTATION.index(next((v['cat'] for v in db if v['cat'] in ROTATION), 'life')) + 1) % 3:] + ROTATION
         S = None
         for cat in order:
