@@ -576,6 +576,104 @@ def make_thumb(S, cat, bg):
     return Image.alpha_composite(base, ov).convert('RGB')
 
 
+
+# ───────────────────────────── 앵커 진행 모드 (대본에 "anchor": true)
+# 위: 뉴스 헤더 · 가상 앵커 스튜디오(채널 오리지널 캐릭터, 실존 인물 아님) · 헤드라인 바  /  아래: 정보 화면을 줄여서  /  자막·전광판은 그대로
+AN_TOP, AN_H = 150, 640                 # 스튜디오 위치·높이
+HL_Y, HL_H = AN_TOP + AN_H, 92          # 헤드라인 바
+INFO_Y0, INFO_Y1 = HL_Y + HL_H + 24, 1496   # 정보 화면 영역
+
+
+def anchor_env(voice_tr, n_frames, sr=44100):
+    """목소리 → 프레임별 입 벌림(0~1) · 말하는 중(0~1)"""
+    hop = sr // FPS; m = np.zeros(n_frames, np.float32)
+    for i in range(n_frames):
+        seg = voice_tr[i * hop:(i + 1) * hop]
+        if len(seg): m[i] = float(np.sqrt(np.mean(seg ** 2)))
+    ref = np.percentile(m[m > 1e-4], 90) if (m > 1e-4).any() else 1
+    m = np.clip(m / (ref + 1e-9), 0, 1)
+    m = np.convolve(m, [.25, .5, .25], 'same')                                         # 프레임 사이 부드럽게
+    talk = np.convolve((m > .12).astype(np.float32), np.ones(9) / 9, 'same')
+    return m, talk
+
+
+def anchor_header(d, S, cat, t):
+    C = CATS[cat]; acc = hexc(C['acc']); a = int(255 * ease(t / .4))
+    d.rectangle([0, 68, W, 146], fill=(6, 10, 22, int(225 * a / 255))); d.rectangle([0, 144, W, 148], fill=acc[:3] + (a,))
+    tag = S.get('header_tag', '속보'); f = F('black', 44); tw = f.getlength(tag) + 56
+    d.rectangle([0, 68, tw + 20, 146], fill=(214, 28, 42, a)); d.text((tw / 2 + 10, 107), tag, font=f, fill=(255, 255, 255, a), anchor='mm')
+    d.text((tw + 46, 107), S.get('header', C['ko'] + ' 뉴스'), font=F('black', 46), fill=(255, 255, 255, a), anchor='lm')
+    if S.get('date'): fd = F('medium', 32); d.text((W - 36, 107), S['date'].replace('-', '.'), font=fd, fill=(255, 255, 255, int(a * .7)), anchor='rm')
+
+
+def anchor_panel(img, AN, sc, S, cat, t, lt):
+    """스튜디오 오른쪽 화면: 장면 아이콘 + 짧은 글자"""
+    C = CATS[cat]; x0, y0, x1, y1 = AN.panel; ov = Image.new('RGBA', img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
+    ic = sc.get('icon') or S['scenes'][0].get('icon') or CAT_ICON.get(cat); txt = sc.get('panel', '')
+    ap = ease(lt / .45); cx = (x0 + x1) / 2; cy = (y0 + y1) / 2 - (34 if txt else 0) + 6 * math.sin(t * 2.1)
+    d.ellipse([cx - 110, cy - 110, cx + 110, cy + 110], fill=hexc(C['acc'], int(46 * ap)))
+    icon(d, ic, cx, cy, 150 * (.7 + .3 * ap), hexc(C['acc']), int(255 * ap))
+    if txt:
+        f = F('black', 50)
+        while f.getlength(txt) > (x1 - x0) - 40 and f.size > 30: f = F('black', f.size - 4)
+        d.text((cx, y1 - 58), txt, font=f, fill=(255, 255, 255, int(255 * ap)), anchor='mm')
+    img.alpha_composite(ov)
+
+
+def anchor_headline(d, text, cat, lt):
+    """스튜디오 아래 큰 헤드라인 바 (뉴스 자막띠)"""
+    C = CATS[cat]; acc = hexc(C['acc']); u = ease(lt / .35); f = F('black', 54)
+    while f.getlength(text) > W - 150 and f.size > 34: f = F('black', f.size - 3)
+    d.rectangle([0, HL_Y, W, HL_Y + HL_H], fill=(255, 255, 255, 250)); d.rectangle([0, HL_Y, 18, HL_Y + HL_H], fill=acc)
+    d.rectangle([0, HL_Y + HL_H - 6, W * u, HL_Y + HL_H], fill=acc)
+    d.text((48 + 30 * (1 - u), HL_Y + HL_H / 2 - 2), text, font=f, fill=(10, 14, 30, int(255 * u)), anchor='lm')
+
+
+def anchor_scene(g, cat, lt):
+    """정보 장면을 원래 크기로 그린 뒤 → 아래 정보 영역에 맞게 줄여서 배치 (전환 효과와 같이 쓰도록 전체 크기 레이어로)"""
+    sc = dict(g['sc'], icon=None) if g['sc'].get('icon') else g['sc']
+    if 'abox' not in g:
+        m = Image.new('RGBA', (W, H), (0, 0, 0, 0)); draw_scene(ImageDraw.Draw(m), sc, cat, g['dur'] * 5, g['dur'], g['words'])
+        bx = m.getbbox() or (0, 300, W, 900); bx = (max(0, bx[0] - 12), max(0, bx[1] - 12), min(W, bx[2] + 12), min(H, bx[3] + 12))
+        k = min(1.0, (W - 60) / (bx[2] - bx[0]), (INFO_Y1 - INFO_Y0) / (bx[3] - bx[1]))
+        nw, nh = int((bx[2] - bx[0]) * k), int((bx[3] - bx[1]) * k)
+        g['abox'] = (bx, k, (nw, nh), (int((W - nw) / 2), int(INFO_Y0 + (INFO_Y1 - INFO_Y0 - nh) / 2)))
+    bx, k, sz, pos = g['abox']
+    sl = Image.new('RGBA', (W, H), (0, 0, 0, 0)); draw_scene(ImageDraw.Draw(sl), sc, cat, lt, g['dur'], g['words'])
+    part = sl.crop(bx); part = part if k >= .999 else part.resize(sz, Image.LANCZOS)
+    out_ = Image.new('RGBA', (W, H), (0, 0, 0, 0)); out_.alpha_composite(part, pos); return out_
+
+
+def make_anchor(S, cat):
+    from anchor import Anchor
+    nm = S.get('anchor_name', 'AI 앵커 세모'); role = S.get('anchor_role', '세상의 모든 이야기 · ' + CATS[cat]['ko'])
+    return Anchor(W, AN_H, name=nm, role=role, accent=hexc(CATS[cat]['acc'])[:3], font=lambda sz: F('black', sz))
+
+
+def make_thumb_anchor(S, cat, bg):
+    """앵커 모드 썸네일: 위 스튜디오(앵커) + 헤드라인 + 큰 제목 + 핵심 숫자"""
+    C = CATS[cat]; acc = hexc(C['acc']); img = bg.frame(3.0); AN = make_anchor(S, cat); hk = S['scenes'][0]
+    st = AN.frame(.5, 0); anchor_panel(st, AN, hk, S, cat, 2, 9); img.alpha_composite(st, (0, AN_TOP))
+    ov = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(ov); anchor_header(d, S, cat, 9)
+    anchor_headline(d, hk.get('headline', S.get('headline', '')), cat, 9)
+    title = S.get('thumb_title', hk.get('title', '')); parts = title.split('\n'); size = 170
+    while True:
+        fT = F('black', size); ls = []
+        for part in parts: ls += wrap(part, fT, W - 100)
+        if (len(ls) <= 3 and all(fT.getlength(x) <= W - 100 for x in ls)) or size <= 90: break
+        size -= 8
+    big = S.get('thumb_big'); blk = len(ls) * int(size * 1.12) + (int(150 * 1.3) + 30 if big else 0)
+    y = int(INFO_Y0 + (1800 - INFO_Y0 - blk) / 2)                                      # 제목 + 숫자를 아래 영역 가운데로
+    for ln in ls:
+        w = fT.getlength(ln); d.text(((W - w) / 2, y), ln, font=fT, fill=(255, 255, 255), stroke_width=10, stroke_fill=(0, 0, 0)); y += int(size * 1.12)
+    if big:
+        f = F('black', 150); w = f.getlength(big)
+        while w > W - 200: f = F('black', f.size - 10); w = f.getlength(big)
+        bx0, by0, bx1, by1 = (W - w) / 2 - 50, y + 30, (W + w) / 2 + 50, y + 30 + f.size * 1.3
+        d.rounded_rectangle([bx0, by0, bx1, by1], 36, fill=(0, 0, 0, 190), outline=acc[:3] + (255,), width=8); d.text((W / 2, (by0 + by1) / 2), big, font=f, fill=acc, anchor='mm')
+    return Image.alpha_composite(img, ov).convert('RGB')
+
+
 # ───────────────────────────── 제작
 def make(script_path, out_dir=None, keep=False, name=None, preview=None):
     """preview=[(장면번호, 장면 안 초), ...] 이면 영상 대신 그 순간들만 PNG 로 저장 (빠른 확인용)"""
@@ -632,20 +730,29 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
     ff = None if preview else subprocess.Popen(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-', '-i', str(wav),
                            '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', str(mp4)], stdin=subprocess.PIPE)
     nf = int(total * FPS); parts_ = Particles(cat, len(name)); TR = .34
-    def scene_layer(g, lt):
+    AM = bool(S.get('anchor'))
+    if AM:
+        AN = make_anchor(S, cat); mouth, talk = anchor_env(voice_tr, nf + 2, sr)
+        def scene_layer(g, lt): return anchor_scene(g, cat, lt)
+    def scene_layer_std(g, lt):
         if 'dy' not in g:
             m = Image.new('RGBA', (W, H), (0, 0, 0, 0)); draw_scene(ImageDraw.Draw(m), g['sc'], cat, g['dur'] * 5, g['dur'], g['words']); bb = m.getbbox() or (0, 300, W, 900)
             g['dy'] = int(max(260 - bb[1], min(1470 - bb[3], (260 + 1470) / 2 - (bb[1] + bb[3]) / 2)))
         sl = Image.new('RGBA', (W, H), (0, 0, 0, 0)); draw_scene(ImageDraw.Draw(sl), g['sc'], cat, lt, g['dur'], g['words'])
         if g['dy'] == 0: return sl
         out_ = Image.new('RGBA', (W, H), (0, 0, 0, 0)); out_.alpha_composite(sl, (0, g['dy']) if g['dy'] >= 0 else (0, 0), (0, 0) if g['dy'] >= 0 else (0, -g['dy'])); return out_
+    if not AM: scene_layer = scene_layer_std
     want = None if not preview else sorted({int((segs[i]['t0'] + lt_) * FPS) for i, lt_ in preview})
     for fi in (want or range(nf)):
         t = fi / FPS; img = bg.frame(t); lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
         gi = next((i for i, g in enumerate(segs) if g['t0'] <= t < g['t0'] + g['dur']), len(segs) - 1 if t >= segs[-1]['t0'] else 0); g = segs[gi]
         lt = t - g['t0']
-        parts_.draw(d, t)
-        badge(d, cat, S.get('date', ''), t)
+        parts_.draw(ImageDraw.Draw(img, 'RGBA') if AM else d, t)                    # 앵커 모드: 입자는 스튜디오 뒤로
+        if AM:
+            st = AN.frame(t, float(mouth[min(fi, len(mouth) - 1)]), float(talk[min(fi, len(talk) - 1)])); anchor_panel(st, AN, g['sc'], S, cat, t, lt)
+            img.alpha_composite(st, (0, AN_TOP)); anchor_header(d, S, cat, t)
+            anchor_headline(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt)
+        else: badge(d, cat, S.get('date', ''), t)
         cur = scene_layer(g, lt)
         if gi and lt < TR:                                                              # 장면 전환: 앞 장면은 왼쪽으로, 새 장면은 오른쪽에서
             u = ease(lt / TR); pg = segs[gi - 1]
@@ -661,15 +768,16 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
         frame = Image.alpha_composite(img, lay).convert('RGB')
         if preview: frame.save(out / f'{name}_p{fi:05d}.jpg', quality=90); continue
         ff.stdin.write(frame.tobytes())
+    TH = make_thumb_anchor if AM else make_thumb
     if preview:
-        make_thumb(S, cat, bg).save(out / f'{name}_pthumb.jpg', quality=90); return sorted(out.glob(f'{name}_p*.jpg'))
+        TH(S, cat, bg).save(out / f'{name}_pthumb.jpg', quality=90); return sorted(out.glob(f'{name}_p*.jpg'))
     ff.stdin.close(); ff.wait()
     # 4) 썸네일 · 업로드 문구
-    make_thumb(S, cat, bg).save(out / f'{name}_thumb.jpg', quality=92)
+    TH(S, cat, bg).save(out / f'{name}_thumb.jpg', quality=92)
     yt = S.get('yt', {}); src = '\n'.join(f'- {x}' for x in S.get('sources', []))
     disc = S.get('disclaimer', '')
     body = f"{yt.get('title', S['scenes'][0].get('title', ''))}\n\n{yt.get('desc', '')}\n\n" + (f"📌 출처\n{src}\n\n" if src else '') + (f"⚠️ {disc}\n\n" if disc else '') + \
-           "이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n\n" + ' '.join('#' + x.replace(' ', '') for x in yt.get('tags', [])[:8])
+           "이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n" + ("진행자 '세모'는 채널이 만든 가상 AI 앵커 캐릭터로, 실존 인물이 아닙니다.\n" if S.get('anchor') else '') + "\n" + ' '.join('#' + x.replace(' ', '') for x in yt.get('tags', [])[:8])
     (out / f'{name}_youtube.txt').write_text(body + f"\n\n[태그] {', '.join(yt.get('tags', []))}", encoding='utf-8')
     if not keep:
         for x in tmp.iterdir(): x.unlink()
