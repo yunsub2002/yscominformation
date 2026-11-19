@@ -1,5 +1,19 @@
 [
  {
+  "cat": "market",
+  "name": "usmarket_20261119",
+  "title": "나스닥 -2.25% 하락 | 간밤 뉴욕증시 1분 정리 (11월 19일)",
+  "desc": "현지 11월 19일 뉴욕증시 마감을 1분으로 정리했습니다. (3대 지수·S&P 500 한 달 흐름·빅테크·반도체·환율)\n\n📌 출처\n- 네이버 증권 해외 지수·종목 시세 https://m.stock.naver.com/worldstock\n- 네이버 증권 원·달러 환율 https://m.stock.naver.com/marketindex\n\n⚠️ 정보 제공용 영상이며 투자 권유가 아닙니다. 해외 주식은 환율 변동 위험도 있습니다. 투자 판단과 책임은 본인에게 있습니다.\n\n이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n진행자 '세모'는 채널이 만든 가상 AI 앵커 캐릭터로, 실존 인물이 아닙니다.\n\n#뉴욕증시 #미국주식 #나스닥 #S&P500 #다우 #미국증시 #엔비디아 #테슬라",
+  "tags": "뉴욕증시, 미국주식, 나스닥, S&P500, 다우, 미국증시, 엔비디아, 테슬라, 해외주식, 쇼츠",
+  "date": "2026-11-20",
+  "sec": 51.3,
+  "mb": 8.2,
+  "url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261120-080247/usmarket_20261119.mp4",
+  "thumb": "thumbs/usmarket_20261119_thumb.jpg",
+  "thumb_url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261120-080247/usmarket_20261119_thumb.jpg",
+  "stock": null
+ },
+ {
   "cat": "stock",
   "name": "stock_055550_20261119",
   "title": "신한지주 주가, 지금 어디쯤? 6개월 -9.8% | 종목 분석",
