@@ -1,5 +1,19 @@
 [
  {
+  "cat": "stock",
+  "name": "stock_055550_20261119",
+  "title": "신한지주 주가, 지금 어디쯤? 6개월 -9.8% | 종목 분석",
+  "desc": "신한지주의 최근 주가 흐름, 기간별 수익률, 같은 업종 비교, 외국인·기관 수급, 가치 지표를 숫자로만 정리했습니다. (11월 19일 종가 기준)\n\n📌 출처\n- 네이버 증권 신한지주 https://m.stock.naver.com/domestic/stock/055550/total\n\n⚠️ 특정 종목의 매수·매도를 권하는 영상이 아닙니다. 투자 판단과 책임은 본인에게 있습니다.\n\n이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n진행자 '세모'는 채널이 만든 가상 AI 앵커 캐릭터로, 실존 인물이 아닙니다.\n\n#신한지주 #신한지주주가 #신한지주주식 #종목분석 #주식 #주가 #코스피 #주식공부",
+  "tags": "신한지주, 신한지주 주가, 신한지주 주식, 종목 분석, 주식, 주가, 코스피, 주식 공부, 재테크, 쇼츠",
+  "date": "2026-11-19",
+  "sec": 58.0,
+  "mb": 9.1,
+  "url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261119-182115/stock_055550_20261119.mp4",
+  "thumb": "thumbs/stock_055550_20261119_thumb.jpg",
+  "thumb_url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261119-182115/stock_055550_20261119_thumb.jpg",
+  "stock": "055550"
+ },
+ {
   "cat": "market",
   "name": "market_20261119",
   "title": "코스피 +1.39% 상승, 2거래일 연속 상승 | 11월 19일 1분 시황",
