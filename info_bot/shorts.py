@@ -598,6 +598,18 @@ def anchor_env(voice_tr, n_frames, sr=44100):
     return m, talk
 
 
+def sub_nudge(d, t, total, text='매일 1분 경제 정리'):
+    """영상 중간(약 35% 지점)에 3초 동안 오른쪽 위에서 '구독' 알림이 나왔다 들어감 — 끝까지 안 보는 시청자용"""
+    t0 = max(5.0, total * .35); u = t - t0
+    if not (0 <= u <= 3.4) or total < 12: return
+    k = ease(min(u, 3.4 - u) / .35); a = int(255 * k); f = F('black', 40); fs = F('bold', 30)
+    bw = max(f.getlength('구독') + 120, fs.getlength(text) + 60); bh = 128; x1 = W - 30 + (1 - k) * (bw + 40); x0 = x1 - bw; y0 = 172
+    d.rounded_rectangle([x0, y0, x1, y0 + bh], 30, fill=(230, 40, 50, int(235 * k)))
+    icon(d, 'bell', x0 + 48, y0 + 42, 46, (255, 255, 255), a)
+    d.text((x0 + 84, y0 + 42), '구독', font=f, fill=(255, 255, 255, a), anchor='lm')
+    d.text((x0 + 30, y0 + 96), text, font=fs, fill=(255, 235, 235, a), anchor='lm')
+
+
 def anchor_header(d, S, cat, t):
     C = CATS[cat]; acc = hexc(C['acc']); a = int(255 * ease(t / .4))
     d.rectangle([0, 68, W, 146], fill=(6, 10, 22, int(225 * a / 255))); d.rectangle([0, 144, W, 148], fill=acc[:3] + (a,))
@@ -676,6 +688,14 @@ def make_thumb_anchor(S, cat, bg):
 
 
 # ───────────────────────────── 제작
+SUB_TEXT = {'market': '매일 1분 증시 정리', 'stock': '매일 1분 종목 정리', 'life': '매일 1분 생활 꿀팁', 'politics': '매일 1분 뉴스 정리'}
+SUB_BLOCK = ("🔔 구독하면 매일 아침 7시·오후 5시, 돈·생활에 바로 쓰는 뉴스를 1분으로 정리해 드려요\n"
+             "👉 https://www.youtube.com/channel/UCD5Gs9LjsVi-42bzH9ZwzXA?sub_confirmation=1\n\n"
+             "📺 같이 보면 좋은 채널\n"
+             "· 이상한 이야기 귀담 (실화 괴담·미스터리) https://www.youtube.com/@귀담스토리\n"
+             "· Dreamcore Sleep (잠 오는 음악) https://www.youtube.com/@Moonsleep-g1c\n\n")
+
+
 def make(script_path, out_dir=None, keep=False, name=None, preview=None):
     """preview=[(장면번호, 장면 안 초), ...] 이면 영상 대신 그 순간들만 PNG 로 저장 (빠른 확인용)"""
     S = script_path if isinstance(script_path, dict) else json.loads(Path(script_path).read_text(encoding='utf-8')); cat = S['category']; C = CATS[cat]
@@ -765,6 +785,7 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
         draw_caption(d, chunks, t, cat)
         progress(d, segs, t, total, cat)
         ticker(d, S.get('ticker'), t, cat)
+        if S.get('sub_nudge', True): sub_nudge(d, t, total, S.get('sub_text') or SUB_TEXT.get(cat, '매일 1분 뉴스 정리'))
         if S.get('source_line'): d.text((60, H - 96), S['source_line'], font=F('regular', 30), fill=(255, 255, 255, 120))
         frame = Image.alpha_composite(img, lay).convert('RGB')
         if preview: frame.save(out / f'{name}_p{fi:05d}.jpg', quality=90); continue
@@ -778,7 +799,7 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
     yt = S.get('yt', {}); src = '\n'.join(f'- {x}' for x in S.get('sources', []))
     disc = S.get('disclaimer', '')
     body = f"{yt.get('title', S['scenes'][0].get('title', ''))}\n\n{yt.get('desc', '')}\n\n" + (f"📌 출처\n{src}\n\n" if src else '') + (f"⚠️ {disc}\n\n" if disc else '') + \
-           "이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n" + ("진행자 '세모'는 채널이 만든 가상 AI 앵커 캐릭터로, 실존 인물이 아닙니다.\n" if S.get('anchor') else '') + "\n" + ' '.join('#' + x.replace(' ', '') for x in yt.get('tags', [])[:8])
+           SUB_BLOCK + "이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n" + ("진행자 '세모'는 채널이 만든 가상 AI 앵커 캐릭터로, 실존 인물이 아닙니다.\n" if S.get('anchor') else '') + "\n" + ' '.join('#' + x.replace(' ', '') for x in yt.get('tags', [])[:8])
     (out / f'{name}_youtube.txt').write_text(body + f"\n\n[태그] {', '.join(yt.get('tags', []))}", encoding='utf-8')
     if not keep:
         for x in tmp.iterdir(): x.unlink()
