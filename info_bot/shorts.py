@@ -45,6 +45,7 @@ CATS = {
     'stock':    dict(folder='종목분석', ko='종목 분석', acc='#4ab0ff', acc2='#cfe8ff', bg=('#04101e', '#0a2440', '#030912'), voice='ko-KR-InJoonNeural', rate='+8%', bgm='pulse'),
     'politics': dict(folder='정치브리핑', ko='정치 브리핑', acc='#b49cff', acc2='#e6dcff', bg=('#0d0b18', '#1d1a30', '#08070f'), voice='ko-KR-SunHiNeural', rate='+6%', bgm='calm'),
     'issue':    dict(folder='사건사고', ko='사건사고', acc='#ff5a3c', acc2='#ffd2c8', bg=('#160707', '#2e0f0c', '#0c0404'), voice='ko-KR-SunHiNeural', rate='+6%', bgm='calm'),
+    'sports':   dict(folder='스포츠연예', ko='스포츠·연예', acc='#8cf542', acc2='#e2ffc8', bg=('#07140a', '#10301a', '#040b06'), voice='ko-KR-InJoonNeural', rate='+10%', bgm='pulse'),
 }
 UP, DOWN, FLAT = '#ff4d5a', '#3d8bff', '#c8ccd8'                  # 한국식: 상승 빨강 · 하락 파랑
 SIDE_A, SIDE_B = '#9aa6c8', '#c8b88a'                            # 정치 양쪽 비교: 정당 색과 무관한 중립색
@@ -263,11 +264,29 @@ def icon(d, kind, cx, cy, s, col, a=255):
     elif kind == 'bell':
         d.pieslice([cx - h * .7, cy - h * .9, cx + h * .7, cy + h * .5], 180, 360, fill=c); d.rectangle([cx - h * .7, cy - h * .2, cx + h * .7, cy + h * .45], fill=c)
         d.rounded_rectangle([cx - h * .9, cy + h * .4, cx + h * .9, cy + h * .58], 8, fill=c); d.ellipse([cx - h * .18, cy + h * .58, cx + h * .18, cy + h * .9], fill=c)
+    elif kind == 'trophy':                                                                 # 우승 트로피
+        d.pieslice([cx - h * .62, cy - h * 1.2, cx + h * .62, cy + h * .2], 0, 180, fill=c2, outline=c, width=w); d.rectangle([cx - h * .62, cy - h * .9, cx + h * .62, cy - h * .5], fill=c2)
+        d.line([(cx - h * .62, cy - h * .9), (cx - h * .62, cy - h * .5)], fill=c, width=w); d.line([(cx + h * .62, cy - h * .9), (cx + h * .62, cy - h * .5)], fill=c, width=w); d.line([(cx - h * .66, cy - h * .9), (cx + h * .66, cy - h * .9)], fill=c, width=w)
+        for sg in (-1, 1): d.arc([cx + sg * h * .62 - h * .32, cy - h * .82, cx + sg * h * .62 + h * .32, cy - h * .2], 270 if sg > 0 else 90, 90 if sg > 0 else 270, fill=c, width=w)
+        d.rectangle([cx - h * .12, cy + h * .2, cx + h * .12, cy + h * .55], fill=c); d.rounded_rectangle([cx - h * .5, cy + h * .55, cx + h * .5, cy + h * .8], 8, fill=c)
+        d.text((cx, cy - h * .45), '★', font=F('black', int(s * .32)), fill=wh, anchor='mm')
+    elif kind == 'tv':                                                                     # TV · 시청률
+        d.rounded_rectangle([cx - h, cy - h * .7, cx + h, cy + h * .55], int(s * .1), fill=c2, outline=c, width=w)
+        d.line([(cx - h * .35, cy - h), (cx, cy - h * .72), (cx + h * .35, cy - h)], fill=c, width=w); d.rounded_rectangle([cx - h * .45, cy + h * .62, cx + h * .45, cy + h * .78], 6, fill=c)
+        bars = [.25, .45, .35, .62]
+        for i, f in enumerate(bars): x = cx - h * .66 + i * h * .36; d.rectangle([x, cy + h * .35 - h * f * 1.4, x + h * .22, cy + h * .35], fill=wh)
+    elif kind == 'ball':                                                                   # 공
+        d.ellipse([cx - h, cy - h, cx + h, cy + h], fill=c2, outline=c, width=w)
+        d.arc([cx - h * 1.6, cy - h * .9, cx - h * .2, cy + h * .9], -50, 50, fill=wh, width=max(3, w // 2)); d.arc([cx + h * .2, cy - h * .9, cx + h * 1.6, cy + h * .9], 130, 230, fill=wh, width=max(3, w // 2))
+    elif kind == 'contract':                                                               # 계약서 + 도장
+        d.rounded_rectangle([cx - h * .7, cy - h, cx + h * .7, cy + h], int(s * .06), fill=c2, outline=c, width=w)
+        for k in range(4): d.line([(cx - h * .45, cy - h * .6 + k * h * .3), (cx + h * .45 - (k == 3) * h * .4, cy - h * .6 + k * h * .3)], fill=wh, width=max(3, w // 2))
+        d.ellipse([cx + h * .1, cy + h * .35, cx + h * .7, cy + h * .95], outline=(255, 70, 70, a), width=w); d.text((cx + h * .4, cy + h * .65), '인', font=F('black', int(s * .2)), fill=(255, 70, 70, a), anchor='mm')
     else:                                                                                  # question
         d.ellipse([cx - h, cy - h, cx + h, cy + h], fill=c2, outline=c, width=w); d.text((cx, cy + s * .02), '?', font=F('black', int(s * .7)), fill=c, anchor='mm')
 
 
-CAT_ICON = {'life': 'bulb', 'market': 'chart', 'stock': 'search', 'politics': 'building', 'issue': 'shield'}
+CAT_ICON = {'life': 'bulb', 'market': 'chart', 'stock': 'search', 'politics': 'building', 'issue': 'shield', 'sports': 'trophy'}
 
 
 # ───────────────────────────── 효과음 (직접 합성, 아주 작게)
@@ -378,7 +397,7 @@ def draw_scene(d, sc, cat, t, dur, words):
             y += lh
         d.rounded_rectangle([X0, y + 40, X0 + 220 * ease((t - .5) / .6), y + 54], 7, fill=hexc(C['acc'], a))
         if sc.get('sub'): text_block(d, (X0, y + 76), sc['sub'], F('bold', 60), hexc('#d8dcef', int(255 * ease((t - .6) / .4))), MW)
-    if sc.get('icon') and kind not in ('hook', 'end', 'quiz'):
+    if sc.get('icon') and kind not in ('hook', 'end', 'quiz') and not sc.get('_pov'):
         ia = ease(t / .4); icon(d, sc['icon'], X0 + MW - 46, top + 20 + 6 * math.sin(t * 2), 92, hexc(C['acc']), int(255 * ia))
     if kind == 'hook': pass
     elif kind == 'bullets':
@@ -555,6 +574,9 @@ def make_thumb(S, cat, bg):
     """썸네일(1080x1920): 큰 아이콘 + 큰 제목 + 핵심 숫자. 반투명은 별도 레이어에 그려 합성"""
     C = CATS[cat]; base = bg.frame(3.0); ov = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(ov); hk = S['scenes'][0]; acc = hexc(C['acc'])
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 70)); badge(d, cat, S.get('date', ''), 9)
+    if S.get('pov'):
+        pt = f"1인칭 시점 · 나는 {S['pov']}"; fp = F('black', 54); pw = fp.getlength(pt) + 80
+        d.rounded_rectangle([(W - pw) / 2, 200, (W + pw) / 2, 290], 45, fill=acc[:3] + (235,)); d.text((W / 2, 245), pt, font=fp, fill=(10, 14, 20, 255), anchor='mm')
     d.ellipse([W / 2 - 230, 300, W / 2 + 230, 760], fill=acc[:3] + (55,)); base = Image.alpha_composite(base, ov)
     ov = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(ov); icon(d, hk.get('icon', CAT_ICON.get(cat)), W / 2, 530, 320, acc)
     title = S.get('thumb_title', hk.get('title', '')).replace('\n', '\n'); lines = title.split('\n') if '\n' in title else None
@@ -617,7 +639,7 @@ def anchor_header(d, S, cat, t):
     tag = S.get('header_tag', '속보'); f = F('black', 44); tw = f.getlength(tag) + 56
     d.rectangle([0, 68, tw + 20, 146], fill=(214, 28, 42, a)); d.text((tw / 2 + 10, 107), tag, font=f, fill=(255, 255, 255, a), anchor='mm')
     d.text((tw + 46, 107), S.get('header', C['ko'] + ' 뉴스'), font=F('black', 46), fill=(255, 255, 255, a), anchor='lm')
-    if S.get('date'): fd = F('medium', 32); d.text((W - 36, 107), S['date'].replace('-', '.'), font=fd, fill=(255, 255, 255, int(a * .7)), anchor='rm')
+    if S.get('date') and not S.get('pov'): fd = F('medium', 32); d.text((W - 36, 107), S['date'].replace('-', '.'), font=fd, fill=(255, 255, 255, int(a * .7)), anchor='rm')
 
 
 def anchor_panel(img, AN, sc, S, cat, t, lt):
@@ -634,11 +656,21 @@ def anchor_panel(img, AN, sc, S, cat, t, lt):
     img.alpha_composite(ov)
 
 
-def news_strip(d, text, cat, lt, y=160, h=86):
+def pov_avatar(d, S, cat, t, talk=0.0):
+    """1인칭 시점: 말하는 '나'(사물) 동그라미 — 헤더 오른쪽 아래, 말할 때 테두리가 숨 쉬듯 커짐"""
+    acc = hexc(CATS[cat]['acc']); a = int(255 * ease(t / .5)); cx, cy, r = W - 112, 168, 86
+    pr = r + 10 + 14 * talk + 4 * math.sin(t * 3)
+    d.ellipse([cx - pr, cy - pr, cx + pr, cy + pr], outline=acc[:3] + (int(a * (.35 + .4 * talk)),), width=6)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(10, 14, 20, int(a * .92)), outline=acc[:3] + (a,), width=6)
+    icon(d, S.get('pov_icon', CAT_ICON.get(cat)), cx, cy - 6, 104, acc, a)
+    f = F('black', 30); tag = '나'; d.rounded_rectangle([cx - 34, cy + r - 26, cx + 34, cy + r + 18], 20, fill=acc[:3] + (a,)); d.text((cx, cy + r - 4), tag, font=f, fill=(10, 14, 20, a), anchor='mm')
+
+
+def news_strip(d, text, cat, lt, y=160, h=86, rpad=0):
     """사람 없는 뉴스 화면: 상단 헤더 바로 아래 흰 자막띠 (장면마다 핵심 한 줄)"""
     if not text: return
     C = CATS[cat]; acc = hexc(C['acc']); u = ease(lt / .35); f = F('black', 52)
-    while f.getlength(text) > W - 150 and f.size > 32: f = F('black', f.size - 3)
+    while f.getlength(text) > W - 150 - rpad and f.size > 32: f = F('black', f.size - 3)
     d.rectangle([0, y, W, y + h], fill=(255, 255, 255, 245)); d.rectangle([0, y, 18, y + h], fill=acc)
     d.rectangle([0, y + h - 6, W * u, y + h], fill=acc)
     d.text((48 + 30 * (1 - u), y + h / 2 - 2), text, font=f, fill=(10, 14, 30, int(255 * u)), anchor='lm')
@@ -699,7 +731,7 @@ def make_thumb_anchor(S, cat, bg):
 
 
 # ───────────────────────────── 제작
-SUB_TEXT = {'issue': '매일 사건사고 1분 정리', 'market': '매일 1분 증시 정리', 'stock': '매일 1분 종목 정리', 'life': '매일 1분 생활 꿀팁', 'politics': '매일 1분 뉴스 정리'}
+SUB_TEXT = {'sports': '매일 1분 스포츠·연예 정리', 'issue': '매일 사건사고 1분 정리', 'market': '매일 1분 증시 정리', 'stock': '매일 1분 종목 정리', 'life': '매일 1분 생활 꿀팁', 'politics': '매일 1분 뉴스 정리'}
 SUB_BLOCK = ("🔔 구독하면 매일 아침 7시·오후 5시, 돈·생활에 바로 쓰는 뉴스를 1분으로 정리해 드려요\n"
              "👉 https://www.youtube.com/channel/UCD5Gs9LjsVi-42bzH9ZwzXA?sub_confirmation=1\n\n"
              "📺 같이 보면 좋은 채널\n"
@@ -712,6 +744,7 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
     S = script_path if isinstance(script_path, dict) else json.loads(Path(script_path).read_text(encoding='utf-8')); cat = S['category']; C = CATS[cat]
     out = Path(out_dir) if out_dir else ROOT.parent / '_out'; out.mkdir(parents=True, exist_ok=True); name = name or (Path(script_path).stem if not isinstance(script_path, dict) else S.get('name', cat)); tmp = out / f'_{name}'; tmp.mkdir(exist_ok=True)
     voice = S.get('voice', C['voice']); rate = S.get('rate', C['rate']); sr = 44100; gap = .28
+    if S.get('pov'): S['scenes'] = [dict(sc, _pov=True) for sc in S['scenes']]
     # 1) 장면별 음성 + 단어 시간
     segs = []; t0 = 0.4
     for i, sc in enumerate(S['scenes']):
@@ -785,7 +818,7 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
             img.alpha_composite(st, (0, AN_TOP)); anchor_header(d, S, cat, t)
             anchor_headline(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt)
         elif S.get('news', True):                                                  # 사람 없는 뉴스 화면: 헤더 바 + 장면별 자막띠
-            anchor_header(d, S, cat, t); news_strip(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt)
+            anchor_header(d, S, cat, t); news_strip(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt, rpad=230 if S.get('pov') else 0)
         else: badge(d, cat, S.get('date', ''), t)
         cur = scene_layer(g, lt)
         if gi and lt < TR:                                                              # 장면 전환: 앞 장면은 왼쪽으로, 새 장면은 오른쪽에서
@@ -795,10 +828,11 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
             if u < 1: lay.alpha_composite(fade_layer(pg['last'].crop((sh_, 0, W, H)), 1 - u), (0, 0))
             off = int(W * .35 * (1 - u)); lay.alpha_composite(fade_layer(cur.crop((0, 0, W - off, H)), u), (off, 0))
         else: lay.alpha_composite(cur)
+        if S.get('pov') and not AM: pov_avatar(d, S, cat, t, float(np.clip(np.abs(voice_tr[int(t * sr):int(t * sr) + int(.08 * sr)]).mean() * 12, 0, 1)) if int(t * sr) < n else 0.0)
         draw_caption(d, chunks, t, cat)
         progress(d, segs, t, total, cat)
         ticker(d, S.get('ticker'), t, cat)
-        if S.get('sub_nudge', True): sub_nudge(d, t, total, S.get('sub_text') or SUB_TEXT.get(cat, '매일 1분 뉴스 정리'), 262 if (not AM and S.get('news', True)) else 172)
+        if S.get('sub_nudge', True): sub_nudge(d, t, total, S.get('sub_text') or SUB_TEXT.get(cat, '매일 1분 뉴스 정리'), (300 if S.get('pov') else 262) if (not AM and S.get('news', True)) else 172)
         if S.get('source_line'): d.text((60, H - 96), S['source_line'], font=F('regular', 30), fill=(255, 255, 255, 120))
         frame = Image.alpha_composite(img, lay).convert('RGB')
         if preview: frame.save(out / f'{name}_p{fi:05d}.jpg', quality=90); continue
