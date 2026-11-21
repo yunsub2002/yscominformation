@@ -44,6 +44,7 @@ CATS = {
     'market':   dict(folder='오늘의시황', ko='오늘의 시황', acc='#ffcf4a', acc2='#fff0c0', bg=('#070b1e', '#121a3e', '#05070f'), voice='ko-KR-InJoonNeural', rate='+10%', bgm='pulse'),
     'stock':    dict(folder='종목분석', ko='종목 분석', acc='#4ab0ff', acc2='#cfe8ff', bg=('#04101e', '#0a2440', '#030912'), voice='ko-KR-InJoonNeural', rate='+8%', bgm='pulse'),
     'politics': dict(folder='정치브리핑', ko='정치 브리핑', acc='#b49cff', acc2='#e6dcff', bg=('#0d0b18', '#1d1a30', '#08070f'), voice='ko-KR-SunHiNeural', rate='+6%', bgm='calm'),
+    'issue':    dict(folder='사건사고', ko='사건사고', acc='#ff5a3c', acc2='#ffd2c8', bg=('#160707', '#2e0f0c', '#0c0404'), voice='ko-KR-SunHiNeural', rate='+6%', bgm='calm'),
 }
 UP, DOWN, FLAT = '#ff4d5a', '#3d8bff', '#c8ccd8'                  # 한국식: 상승 빨강 · 하락 파랑
 SIDE_A, SIDE_B = '#9aa6c8', '#c8b88a'                            # 정치 양쪽 비교: 정당 색과 무관한 중립색
@@ -266,7 +267,7 @@ def icon(d, kind, cx, cy, s, col, a=255):
         d.ellipse([cx - h, cy - h, cx + h, cy + h], fill=c2, outline=c, width=w); d.text((cx, cy + s * .02), '?', font=F('black', int(s * .7)), fill=c, anchor='mm')
 
 
-CAT_ICON = {'life': 'bulb', 'market': 'chart', 'stock': 'search', 'politics': 'building'}
+CAT_ICON = {'life': 'bulb', 'market': 'chart', 'stock': 'search', 'politics': 'building', 'issue': 'shield'}
 
 
 # ───────────────────────────── 효과음 (직접 합성, 아주 작게)
@@ -598,12 +599,12 @@ def anchor_env(voice_tr, n_frames, sr=44100):
     return m, talk
 
 
-def sub_nudge(d, t, total, text='매일 1분 경제 정리'):
+def sub_nudge(d, t, total, text='매일 1분 경제 정리', y0=172):
     """영상 중간(약 35% 지점)에 3초 동안 오른쪽 위에서 '구독' 알림이 나왔다 들어감 — 끝까지 안 보는 시청자용"""
     t0 = max(5.0, total * .35); u = t - t0
     if not (0 <= u <= 3.4) or total < 12: return
     k = ease(min(u, 3.4 - u) / .35); a = int(255 * k); f = F('black', 40); fs = F('bold', 30)
-    bw = max(f.getlength('구독') + 120, fs.getlength(text) + 60); bh = 128; x1 = W - 30 + (1 - k) * (bw + 40); x0 = x1 - bw; y0 = 172
+    bw = max(f.getlength('구독') + 120, fs.getlength(text) + 60); bh = 128; x1 = W - 30 + (1 - k) * (bw + 40); x0 = x1 - bw
     d.rounded_rectangle([x0, y0, x1, y0 + bh], 30, fill=(230, 40, 50, int(235 * k)))
     icon(d, 'bell', x0 + 48, y0 + 42, 46, (255, 255, 255), a)
     d.text((x0 + 84, y0 + 42), '구독', font=f, fill=(255, 255, 255, a), anchor='lm')
@@ -631,6 +632,16 @@ def anchor_panel(img, AN, sc, S, cat, t, lt):
         while f.getlength(txt) > (x1 - x0) - 40 and f.size > 30: f = F('black', f.size - 4)
         d.text((cx, y1 - 58), txt, font=f, fill=(255, 255, 255, int(255 * ap)), anchor='mm')
     img.alpha_composite(ov)
+
+
+def news_strip(d, text, cat, lt, y=160, h=86):
+    """사람 없는 뉴스 화면: 상단 헤더 바로 아래 흰 자막띠 (장면마다 핵심 한 줄)"""
+    if not text: return
+    C = CATS[cat]; acc = hexc(C['acc']); u = ease(lt / .35); f = F('black', 52)
+    while f.getlength(text) > W - 150 and f.size > 32: f = F('black', f.size - 3)
+    d.rectangle([0, y, W, y + h], fill=(255, 255, 255, 245)); d.rectangle([0, y, 18, y + h], fill=acc)
+    d.rectangle([0, y + h - 6, W * u, y + h], fill=acc)
+    d.text((48 + 30 * (1 - u), y + h / 2 - 2), text, font=f, fill=(10, 14, 30, int(255 * u)), anchor='lm')
 
 
 def anchor_headline(d, text, cat, lt):
@@ -688,7 +699,7 @@ def make_thumb_anchor(S, cat, bg):
 
 
 # ───────────────────────────── 제작
-SUB_TEXT = {'market': '매일 1분 증시 정리', 'stock': '매일 1분 종목 정리', 'life': '매일 1분 생활 꿀팁', 'politics': '매일 1분 뉴스 정리'}
+SUB_TEXT = {'issue': '매일 사건사고 1분 정리', 'market': '매일 1분 증시 정리', 'stock': '매일 1분 종목 정리', 'life': '매일 1분 생활 꿀팁', 'politics': '매일 1분 뉴스 정리'}
 SUB_BLOCK = ("🔔 구독하면 매일 아침 7시·오후 5시, 돈·생활에 바로 쓰는 뉴스를 1분으로 정리해 드려요\n"
              "👉 https://www.youtube.com/channel/UCD5Gs9LjsVi-42bzH9ZwzXA?sub_confirmation=1\n\n"
              "📺 같이 보면 좋은 채널\n"
@@ -773,6 +784,8 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
             st = AN.frame(t, float(mouth[min(fi, len(mouth) - 1)]), float(talk[min(fi, len(talk) - 1)])); anchor_panel(st, AN, g['sc'], S, cat, t, lt)
             img.alpha_composite(st, (0, AN_TOP)); anchor_header(d, S, cat, t)
             anchor_headline(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt)
+        elif S.get('news', True):                                                  # 사람 없는 뉴스 화면: 헤더 바 + 장면별 자막띠
+            anchor_header(d, S, cat, t); news_strip(d, g['sc'].get('headline') or S.get('headline', ''), cat, lt)
         else: badge(d, cat, S.get('date', ''), t)
         cur = scene_layer(g, lt)
         if gi and lt < TR:                                                              # 장면 전환: 앞 장면은 왼쪽으로, 새 장면은 오른쪽에서
@@ -785,7 +798,7 @@ def make(script_path, out_dir=None, keep=False, name=None, preview=None):
         draw_caption(d, chunks, t, cat)
         progress(d, segs, t, total, cat)
         ticker(d, S.get('ticker'), t, cat)
-        if S.get('sub_nudge', True): sub_nudge(d, t, total, S.get('sub_text') or SUB_TEXT.get(cat, '매일 1분 뉴스 정리'))
+        if S.get('sub_nudge', True): sub_nudge(d, t, total, S.get('sub_text') or SUB_TEXT.get(cat, '매일 1분 뉴스 정리'), 262 if (not AM and S.get('news', True)) else 172)
         if S.get('source_line'): d.text((60, H - 96), S['source_line'], font=F('regular', 30), fill=(255, 255, 255, 120))
         frame = Image.alpha_composite(img, lay).convert('RGB')
         if preview: frame.save(out / f'{name}_p{fi:05d}.jpg', quality=90); continue

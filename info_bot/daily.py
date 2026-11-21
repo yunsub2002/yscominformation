@@ -16,7 +16,7 @@ import shorts as SH  # noqa: E402
 REPO = os.environ.get('GITHUB_REPOSITORY', 'yunsub2002/yscominformation')
 KST = dt.timezone(dt.timedelta(hours=9)); NOW = dt.datetime.now(KST); TODAY = NOW.date()
 ROTATION = ['market', 'stock', 'life']
-TAB = {'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff')}
+TAB = {'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff'), 'issue': ('사건사고', '사건사고', '#ff5a3c')}
 UA = {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'}
 # 종목 분석에서 돌아가며 다룰 종목 (시가총액 상위 위주). 바꾸고 싶으면 이 목록만 고치면 됩니다.
 STOCKS = [('005930', '삼성전자'), ('000660', 'SK하이닉스'), ('373220', 'LG에너지솔루션'), ('207940', '삼성바이오로직스'), ('005380', '현대차'), ('012450', '한화에어로스페이스'),
@@ -347,7 +347,7 @@ def write_usmarket(R, db=()):
     if '.SOX' in idx: its.append(dict(label='필라델피아 반도체', value=f"{idx['.SOX']['close']:,.2f}", change=pct(idx['.SOX']['ratio']))); say.append(f'반도체 지수는 {pct_say(idx[".SOX"]["ratio"])} {updown_say(idx[".SOX"]["ratio"])}고')
     if f: its.append(dict(label='원·달러 환율', value=f"{f['close']:,.1f}원", change=f"{'+' if f['diff'] > 0 else ''}{f['diff']:.1f}원")); say.append(f'원 달러 환율은 {f["close"]:.0f}원입니다')
     if its: sc.append(dict(type='stats', title='반도체 · 환율', icon='coin', headline='반도체 지수 · 원달러 환율', panel='반도체·환율', items=its, say=(', '.join(say) + '.').replace('고.', '습니다.')))
-    sc.append(dict(type='end', title='투자 판단은 신중하게', sub='매일 아침 뉴욕증시 1분 정리', disclaimer=DISC_US, headline='매일 아침 뉴욕증시 정리', panel='세모 뉴스',
+    sc.append(dict(type='end', title='투자 판단은 신중하게', sub='매일 아침 뉴욕증시 1분 정리', disclaimer=DISC_US, headline='매일 아침 뉴욕증시 정리', panel='',
                    say='정보 제공용 영상입니다. 구독하시면 매일 아침 뉴욕증시를 정리해 드릴게요.'))
     tick = [f"{nm} {idx[c]['close']:,.2f} {arrow_s(idx[c]['ratio'])}{abs(idx[c]['ratio']):.2f}%" for c, nm in US_IDX + [('.SOX', '반도체')] if c in idx] + \
            [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in caps] + ([f"USD/KRW {f['close']:,.1f}"] if f else [])
@@ -398,7 +398,7 @@ def write_usstock(R, idx=0, last_code=None, code=None):
         sc.append(dict(type='bars', title='같은 업종, 그날은?', icon='chart', unit='전일 대비 등락률 (네이버 증권 업종 비교)', headline='같은 업종 등락 비교', panel='업종 비교',
                        items=[dict(label=n + (' ◀' if n == nm else ''), value=r, text=pct(r), color=SH.UP if r > 0 else SH.DOWN) for n, r in allp],
                        say='같은 업종에서는 ' + ', '.join(f'{josa(n, "은", "는")} {pct_say(r)} {updown_say(r)}고' for n, r in peers[:2]).rstrip('고') + '습니다.'))
-    sc.append(dict(type='end', title='숫자는 참고만', sub='매일 한 종목씩 미국 주식 점검', disclaimer=DISC_US, headline='매일 미국 주식 한 종목', panel='세모 뉴스',
+    sc.append(dict(type='end', title='숫자는 참고만', sub='매일 한 종목씩 미국 주식 점검', disclaimer=DISC_US, headline='매일 미국 주식 한 종목', panel='',
                    say='특정 종목을 권하는 영상이 아닙니다. 구독하시면 매일 미국 주식 한 종목씩 살펴볼게요.'))
     tick = [f"{nm} ${last:,.2f} {arrow_s(b['ratio'])}{abs(b['ratio']):.2f}%"] + [f"{n} {arrow_s(r)}{abs(r):.2f}%" for n, r in peers] + [f"1년 최고 ${hi52:,.2f}", f"1년 최저 ${lo52:,.2f}"] + \
            ([f"USD/KRW {f['close']:,.1f}"] if f else [])
@@ -413,7 +413,7 @@ def write_usstock(R, idx=0, last_code=None, code=None):
 def anchorize(S):
     """모든 자동 대본을 앵커 진행으로: 남성 앵커 음성 + 장면별 헤드라인"""
     if not S: return S
-    S['anchor'] = True; S['voice'] = 'ko-KR-InJoonNeural'
+    S['anchor'] = False; S['news'] = True; S['voice'] = 'ko-KR-SunHiNeural'           # 2026.11.21: 앵커 캐릭터 없이 뉴스 그래픽 화면 + 또렷한 뉴스 낭독 목소리
     S.setdefault('header', {'market': '오늘의 시황', 'stock': '종목 분석', 'life': '생활 지식 속보'}.get(S['category'], '세모 뉴스'))
     for sc in S['scenes']:
         if sc.get('headline'): continue
@@ -477,7 +477,7 @@ render();
 
 
 def render_page(db):
-    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('market', 'stock', 'life', 'politics')]
+    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('issue', 'market', 'stock', 'life', 'politics')]
     page = PAGE.replace('__DATA__', json.dumps(db, ensure_ascii=False).replace('</', '<\\/')).replace('__TABS__', json.dumps(tabs, ensure_ascii=False))
     (ROOT / 'index.html').write_text(page, encoding='utf-8')
 
