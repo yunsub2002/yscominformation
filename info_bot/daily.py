@@ -16,7 +16,7 @@ import shorts as SH  # noqa: E402
 REPO = os.environ.get('GITHUB_REPOSITORY', 'yunsub2002/yscominformation')
 KST = dt.timezone(dt.timedelta(hours=9)); NOW = dt.datetime.now(KST); TODAY = NOW.date()
 ROTATION = ['market', 'stock', 'life']
-TAB = {'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff'), 'issue': ('사건사고', '사건사고', '#ff5a3c'), 'sports': ('스포츠연예', '스포츠·연예', '#8cf542')}
+TAB = {'long': ('장편리뷰', '장편 리뷰', '#ff9f43'), 'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff'), 'issue': ('사건사고', '사건사고', '#ff5a3c'), 'sports': ('스포츠연예', '스포츠·연예', '#8cf542')}
 UA = {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'}
 # 종목 분석에서 돌아가며 다룰 종목 (시가총액 상위 위주). 바꾸고 싶으면 이 목록만 고치면 됩니다.
 STOCKS = [('005930', '삼성전자'), ('000660', 'SK하이닉스'), ('373220', 'LG에너지솔루션'), ('207940', '삼성바이오로직스'), ('005380', '현대차'), ('012450', '한화에어로스페이스'),
@@ -477,7 +477,7 @@ render();
 
 
 def render_page(db):
-    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('issue', 'sports', 'market', 'stock', 'life', 'politics')]
+    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('long', 'issue', 'sports', 'market', 'stock', 'life', 'politics')]
     page = PAGE.replace('__DATA__', json.dumps(db, ensure_ascii=False).replace('</', '<\\/')).replace('__TABS__', json.dumps(tabs, ensure_ascii=False))
     (ROOT / 'index.html').write_text(page, encoding='utf-8')
 
@@ -525,6 +525,7 @@ def from_queue(qfile, db, R):
     """대기열 파일 → (상태, 대본)  상태: ok / wait(장 마감 뒤에 다시) / drop(지난 날짜 자동 대본)
     자동 대본: {"auto": "market" | "stock" | "life", "date": "YYYY-MM-DD"} → 실행 순간의 실제 숫자로 대본을 만듦"""
     S = json.loads(qfile.read_text(encoding='utf-8')); auto = S.get('auto')
+    if S.get('external'): return 'external', S                                      # 직접 만든 영상(이미 릴리스에 올림) → 보관함에만 추가
     if auto == 'repair': return 'drop', None                                         # 링크 고치기 신호 파일 (고치기는 시작할 때 이미 함)
     if not auto:
         S.setdefault('name', qfile.stem); return 'ok', S
@@ -611,6 +612,11 @@ def main():
             print(f'\n[{i}/{len(queue)}] {qfile.name}', flush=True)
             try:
                 st, S = from_queue(qfile, db, R)
+                if st == 'external':
+                    e = dict(S['external']); db[:] = [v for v in db if v.get('name') != e['name']]; db.insert(0, e)
+                    dbp.write_text(json.dumps(db, ensure_ascii=False, indent=1), encoding='utf-8'); render_page(db)
+                    git_push(f"보관함 추가(직접 만든 영상): {e['title'][:60]}", ['videos.json', 'index.html', 'thumbs'], [qfile.relative_to(ROOT)])
+                    print('  ✓ 보관함에 추가:', e['title'], flush=True); made += 1; continue
                 if st == 'wait':
                     waiting.append(qfile.name); print('  장 마감(오후 4시) 전이라 대기열에 남겨 둡니다 → 오후 5시 7분 자동 실행 때 만들어집니다'); continue
                 if st == 'drop' and '"repair"' in qfile.read_text(encoding='utf-8'):
