@@ -1,5 +1,19 @@
 [
  {
+  "cat": "market",
+  "name": "market_20261124",
+  "title": "코스피 +6.32% 급등 | 11월 24일 1분 시황",
+  "desc": "11월 24일 국내 증시 마감 숫자를 1분으로 정리했습니다. (지수·한 달 흐름·수급·대형주·환율·코인)\n\n📌 출처\n- 네이버 증권 (지수·투자자별 매매·환율·종목 시세) https://m.stock.naver.com\n- 업비트 (코인 시세, 전일 대비) https://upbit.com\n\n⚠️ 정보 제공용 영상이며 투자 권유가 아닙니다. 투자 판단과 책임은 본인에게 있습니다.\n\n🔔 구독하면 매일 아침 7시·오후 5시, 돈·생활에 바로 쓰는 뉴스를 1분으로 정리해 드려요\n👉 https://www.youtube.com/channel/UCD5Gs9LjsVi-42bzH9ZwzXA?sub_confirmation=1\n\n📺 같이 보면 좋은 채널\n· 이상한 이야기 귀담 (실화 괴담·미스터리) https://www.youtube.com/@귀담스토리\n· Dreamcore Sleep (잠 오는 음악) https://www.youtube.com/@Moonsleep-g1c\n\n이 영상의 음성은 AI 음성(Microsoft 신경망 음성)이며, 화면과 배경음악은 채널이 직접 프로그램으로 만들었습니다.\n\n#코스피 #코스닥 #주식시황 #오늘의증시 #증시마감 #환율 #비트코인 #코인시세",
+  "tags": "코스피, 코스닥, 주식 시황, 오늘의 증시, 증시 마감, 환율, 비트코인, 코인 시세, 주식, 쇼츠",
+  "date": "2026-11-24",
+  "sec": 51.5,
+  "mb": 9.5,
+  "url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261124-154455/market_20261124.mp4",
+  "thumb": "thumbs/market_20261124_thumb.jpg",
+  "thumb_url": "https://github.com/yunsub2002/yscominformation/releases/download/info-20261124-154455/market_20261124_thumb.jpg",
+  "stock": null
+ },
+ {
   "cat": "long",
   "name": "realestate_20261124",
   "title": "만안구·명학역, 토허제 밖에서 무슨 일이? 수도권 부동산 20분 총정리 (매매·전월세·토허제 안과 밖) | 2026년 11월",
