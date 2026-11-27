@@ -16,7 +16,7 @@ import shorts as SH  # noqa: E402
 REPO = os.environ.get('GITHUB_REPOSITORY', 'yunsub2002/yscominformation')
 KST = dt.timezone(dt.timedelta(hours=9)); NOW = dt.datetime.now(KST); TODAY = NOW.date()
 ROTATION = ['market', 'stock', 'life']
-TAB = {'long': ('장편리뷰', '장편 리뷰', '#ff9f43'), 'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff'), 'issue': ('사건사고', '사건사고', '#ff5a3c'), 'sports': ('스포츠연예', '스포츠·연예', '#8cf542')}
+TAB = {'long': ('장편리뷰', '장편 리뷰', '#ff9f43'), 'soccer': ('축구전술', '축구 전술', '#4ade80'), 'life': ('생활꿀팁', '생활 꿀팁', '#2ee6a6'), 'market': ('오늘의시황', '오늘의 시황', '#ffcf4a'), 'stock': ('종목분석', '종목 분석', '#4ab0ff'), 'politics': ('정치브리핑', '정치 브리핑', '#b49cff'), 'issue': ('사건사고', '사건사고', '#ff5a3c'), 'sports': ('스포츠연예', '스포츠·연예', '#8cf542')}
 UA = {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'}
 # 종목 분석에서 돌아가며 다룰 종목 (시가총액 상위 위주). 바꾸고 싶으면 이 목록만 고치면 됩니다.
 STOCKS = [('005930', '삼성전자'), ('000660', 'SK하이닉스'), ('373220', 'LG에너지솔루션'), ('207940', '삼성바이오로직스'), ('005380', '현대차'), ('012450', '한화에어로스페이스'),
@@ -477,7 +477,7 @@ render();
 
 
 def render_page(db):
-    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('long', 'issue', 'sports', 'market', 'stock', 'life', 'politics')]
+    tabs = [[k, TAB[k][1], TAB[k][2]] for k in ('long', 'soccer', 'issue', 'sports', 'market', 'stock', 'life', 'politics')]
     page = PAGE.replace('__DATA__', json.dumps(db, ensure_ascii=False).replace('</', '<\\/')).replace('__TABS__', json.dumps(tabs, ensure_ascii=False))
     (ROOT / 'index.html').write_text(page, encoding='utf-8')
 
